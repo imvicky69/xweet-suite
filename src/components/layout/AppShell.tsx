@@ -9,7 +9,6 @@ import {
   Settings,
   Search,
   Bell,
-  Plus,
   Menu,
   X,
   ChevronDown,
@@ -19,6 +18,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "cn"
 import { Toaster } from "sonner"
+import { useWorkspace } from "@/context/WorkspaceContext"
+import { AppLogo } from "@/components/ui/app-logo"
 
 interface AppShellProps {
   children: React.ReactNode
@@ -67,30 +68,64 @@ const secondaryNavItems = [
     icon: Receipt,
     label: "Invoices",
     tag: "Soon",
+    isExternal: true,
   },
   {
-    to: "#settings",
+    to: "/settings",
     icon: Settings,
     label: "Settings",
+    isExternal: false,
   },
 ]
 
 export function AppShell({ children }: AppShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
   const location = useLocation()
+  const { settings } = useWorkspace()
 
   // Close mobile sidebar on route change
   React.useEffect(() => {
     setMobileMenuOpen(false)
   }, [location.pathname])
 
+  // Live clock ticker right beside currency
+  const [liveTime, setLiveTime] = React.useState("")
+
+  React.useEffect(() => {
+    const updateTime = () => {
+      try {
+        const t = new Intl.DateTimeFormat(settings.currency.locale, {
+          timeZone: settings.timezone,
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }).format(new Date())
+        setLiveTime(t)
+      } catch {
+        setLiveTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))
+      }
+    }
+    updateTime()
+    const timer = setInterval(updateTime, 1000)
+    return () => clearInterval(timer)
+  }, [settings.timezone, settings.currency.locale])
+
   // Get current page title for breadcrumb
-  const currentNav = mainNavItems.find(
+  const currentNav = [...mainNavItems, ...secondaryNavItems].find(
     (item) =>
       item.to === location.pathname ||
-      (item.to !== "/" && location.pathname.startsWith(item.to))
+      (item.to !== "/" && !item.to.startsWith("#") && location.pathname.startsWith(item.to))
   )
   const pageTitle = currentNav ? currentNav.label : "Overview"
+
+  const initials = settings.accountOwnerName
+    ? settings.accountOwnerName
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "XS"
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground antialiased">
@@ -112,15 +147,13 @@ export function AppShell({ children }: AppShellProps) {
         {/* Workspace Brand / Header */}
         <div className="flex h-14 items-center justify-between border-b border-border/80 px-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground font-semibold text-xs tracking-tight shadow-none">
-              XS
-            </div>
+            <AppLogo variant="dark" size="sm" />
             <div className="flex flex-col">
-              <span className="font-semibold text-xs tracking-tight text-foreground leading-tight">
-                Xweet Suite
+              <span className="font-semibold text-xs tracking-tight text-foreground leading-tight truncate max-w-[130px]">
+                {settings.workspaceName}
               </span>
-              <span className="text-[10px] text-muted-foreground leading-none">
-                Freelance HQ
+              <span className="text-[10px] text-muted-foreground leading-none truncate max-w-[130px]">
+                {settings.tagline}
               </span>
             </div>
           </div>
@@ -219,22 +252,58 @@ export function AppShell({ children }: AppShellProps) {
             <nav className="space-y-0.5">
               {secondaryNavItems.map((item) => {
                 const Icon = item.icon
+                if (item.isExternal) {
+                  return (
+                    <a
+                      key={item.to}
+                      href={item.to}
+                      className="group flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.tag && (
+                        <span className="text-[10px] text-muted-foreground/80 border border-border/80 px-1 py-0.25 rounded font-mono">
+                          {item.tag}
+                        </span>
+                      )}
+                    </a>
+                  )
+                }
+
                 return (
-                  <a
+                  <NavLink
                     key={item.to}
-                    href={item.to}
-                    className="group flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors"
+                    to={item.to}
+                    className={({ isActive }) =>
+                      cn(
+                        "group relative flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                        isActive
+                          ? "bg-secondary text-foreground font-semibold"
+                          : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                      )
+                    }
                   >
-                    <div className="flex items-center gap-2.5">
-                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" />
-                      <span>{item.label}</span>
-                    </div>
-                    {item.tag && (
-                      <span className="text-[10px] text-muted-foreground/80 border border-border/80 px-1 py-0.25 rounded font-mono">
-                        {item.tag}
-                      </span>
+                    {({ isActive }) => (
+                      <>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <Icon
+                            className={cn(
+                              "h-4 w-4 shrink-0 transition-colors",
+                              isActive
+                                ? "text-primary"
+                                : "text-muted-foreground group-hover:text-foreground"
+                            )}
+                          />
+                          <span className="truncate">{item.label}</span>
+                        </div>
+                        {isActive && (
+                          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-3.5 w-0.5 rounded-r bg-primary" />
+                        )}
+                      </>
                     )}
-                  </a>
+                  </NavLink>
                 )
               })}
             </nav>
@@ -243,23 +312,25 @@ export function AppShell({ children }: AppShellProps) {
 
         {/* Sidebar Footer: User / Status */}
         <div className="border-t border-border/80 p-3">
-          <div className="flex items-center justify-between rounded-md border border-border/60 bg-card p-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-xs font-semibold text-foreground">
-                RS
+          <NavLink to="/settings" className="block">
+            <div className="flex items-center justify-between rounded-md border border-border/60 bg-card p-2 hover:bg-secondary/50 transition-colors cursor-pointer">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-xs font-semibold text-foreground">
+                  {initials}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="truncate text-xs font-medium text-foreground leading-tight">
+                    {settings.accountOwnerName}
+                  </span>
+                  <span className="truncate text-[10px] text-muted-foreground flex items-center gap-1">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    {settings.country.code} · Active
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-col min-w-0">
-                <span className="truncate text-xs font-medium text-foreground leading-tight">
-                  Rajvi S.
-                </span>
-                <span className="truncate text-[10px] text-muted-foreground flex items-center gap-1">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Synced
-                </span>
-              </div>
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             </div>
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          </div>
+          </NavLink>
         </div>
       </aside>
 
@@ -268,36 +339,42 @@ export function AppShell({ children }: AppShellProps) {
         {/* Top Header */}
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-border/80 bg-background/95 px-4 backdrop-blur-xs md:px-6">
           <div className="flex items-center gap-3">
-            {/* Mobile Hamburger */}
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="md:hidden"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Open navigation menu"
-            >
-              <Menu className="h-4 w-4" />
-            </Button>
+            {/* Mobile Hamburger & Logo */}
+            <div className="flex items-center gap-2 md:hidden">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="Open navigation menu"
+              >
+                <Menu className="h-4 w-4" />
+              </Button>
+              <AppLogo variant="dark" size="xs" />
+            </div>
 
             {/* Breadcrumb Path */}
             <nav className="flex items-center gap-1.5 text-xs">
-              <span className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer hidden sm:inline">
+              <NavLink to="/" className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer hidden sm:inline">
                 Workspace
-              </span>
+              </NavLink>
               <span className="text-muted-foreground/60 hidden sm:inline">/</span>
               <span className="font-medium text-foreground">{pageTitle}</span>
             </nav>
           </div>
 
           {/* Header Actions */}
-          <div className="flex items-center gap-2.5">
-            {/* Live IST indicator */}
-            <div className="hidden md:flex items-center gap-2 rounded-md border border-border/70 bg-card px-2.5 py-1 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-2">
+            {/* Simple Live Time & Currency Badge */}
+            <NavLink
+              to="/settings"
+              title="Click to configure Workplace Preferences"
+              className="flex items-center gap-2 rounded-md border border-border/80 bg-card px-2.5 py-1 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors cursor-pointer"
+            >
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="font-mono text-foreground font-medium">IST (UTC+5:30)</span>
-              <span className="text-muted-foreground/60">|</span>
-              <span className="font-semibold text-primary">₹ INR</span>
-            </div>
+              <span className="font-mono text-foreground font-semibold">{liveTime}</span>
+              <span className="text-muted-foreground/40">|</span>
+              <span className="font-semibold text-primary">{settings.currency.symbol} {settings.currency.code}</span>
+            </NavLink>
 
             <Button
               variant="ghost"
@@ -308,16 +385,6 @@ export function AppShell({ children }: AppShellProps) {
               <Bell className="h-4 w-4" />
               <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
             </Button>
-
-            <NavLink to="/leads">
-              <Button
-                size="sm"
-                className="gap-1.5 font-medium text-xs shadow-none cursor-pointer"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Add Lead</span>
-              </Button>
-            </NavLink>
           </div>
         </header>
 

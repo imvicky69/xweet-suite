@@ -26,12 +26,20 @@ import {
   Download,
   Trash2,
   Mail,
-  Sparkles,
   ExternalLink,
   Target,
   StickyNote,
+  Pin,
+  Phone,
 } from "lucide-react"
 import { toast } from "sonner"
+import { useWorkspace } from "@/context/WorkspaceContext"
+import { AppLogo } from "@/components/ui/app-logo"
+import { initialMockLeads } from "@/data/mockLeads"
+import type { LeadItem } from "@/types/lead"
+import { hasValidPhone, hasValidEmail } from "@/types/lead"
+import { WhatsAppIcon } from "@/components/leads/LeadDetailsDialog"
+import { getFollowUpStatus } from "@/lib/formatters"
 
 interface Milestone {
   id: string
@@ -140,6 +148,41 @@ const recentInquiries: ClientInquiry[] = [
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { settings, formatCurrency, formatCompactCurrency, getWhatsAppUrl } = useWorkspace()
+
+  // Leads for Follow-up Reminders & Pinned Notes
+  const [dashboardLeads, setDashboardLeads] = React.useState<LeadItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("xweet_leads_mock")
+      if (saved) return JSON.parse(saved)
+    } catch (e) {
+      console.warn("Could not read leads for dashboard", e)
+    }
+    return initialMockLeads
+  })
+
+  // Filter pinned reminders or follow-ups (excluding archived leads)
+  const pinnedFollowUps = React.useMemo(() => {
+    return dashboardLeads.filter(
+      (l) =>
+        !l.isArchived &&
+        l.status !== "Won" &&
+        l.status !== "Lost" &&
+        (l.showOnDashboard || (l.dashboardNote && l.dashboardNote.trim().length > 0))
+    )
+  }, [dashboardLeads])
+
+  const dismissReminder = (leadId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const updated = dashboardLeads.map((l) =>
+      l.id === leadId ? { ...l, showOnDashboard: false, dashboardNote: "" } : l
+    )
+    setDashboardLeads(updated)
+    try {
+      localStorage.setItem("xweet_leads_mock", JSON.stringify(updated))
+    } catch {}
+    toast.info("Reminder dismissed from dashboard")
+  }
 
   // Milestones State with localStorage persistence
   const [milestones, setMilestones] = React.useState<Milestone[]>(() => {
@@ -200,7 +243,7 @@ export default function Dashboard() {
   const [newMilestoneClient, setNewMilestoneClient] = React.useState("")
   const [showAddMilestone, setShowAddMilestone] = React.useState(false)
 
-  // Live IST Clock
+  // Live Clock
   const [istTime, setIstTime] = React.useState("")
   const [istDate, setIstDate] = React.useState("")
   const [greeting, setGreeting] = React.useState("Welcome")
@@ -208,44 +251,48 @@ export default function Dashboard() {
   React.useEffect(() => {
     const updateTime = () => {
       const now = new Date()
-      const timeStr = new Intl.DateTimeFormat("en-IN", {
-        timeZone: "Asia/Kolkata",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true,
-      }).format(now)
+      try {
+        const timeStr = new Intl.DateTimeFormat(settings.currency.locale, {
+          timeZone: settings.timezone,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true,
+        }).format(now)
 
-      const dateStr = new Intl.DateTimeFormat("en-IN", {
-        timeZone: "Asia/Kolkata",
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }).format(now)
+        const dateStr = new Intl.DateTimeFormat(settings.currency.locale, {
+          timeZone: settings.timezone,
+          weekday: "short",
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }).format(now)
 
-      setIstTime(timeStr)
-      setIstDate(dateStr)
+        setIstTime(timeStr)
+        setIstDate(dateStr)
 
-      // Time of day greeting in IST
-      const istHours = parseInt(
-        new Intl.DateTimeFormat("en-IN", {
-          timeZone: "Asia/Kolkata",
-          hour: "numeric",
-          hour12: false,
-        }).format(now),
-        10
-      )
+        const hours = parseInt(
+          new Intl.DateTimeFormat(settings.currency.locale, {
+            timeZone: settings.timezone,
+            hour: "numeric",
+            hour12: false,
+          }).format(now),
+          10
+        )
 
-      if (istHours < 12) setGreeting("Good morning")
-      else if (istHours < 17) setGreeting("Good afternoon")
-      else setGreeting("Good evening")
+        if (hours < 12) setGreeting("Good morning")
+        else if (hours < 17) setGreeting("Good afternoon")
+        else setGreeting("Good evening")
+      } catch {
+        setIstTime(now.toLocaleTimeString())
+        setIstDate(now.toLocaleDateString())
+      }
     }
 
     updateTime()
     const timer = setInterval(updateTime, 1000)
     return () => clearInterval(timer)
-  }, [])
+  }, [settings.timezone, settings.currency.locale])
 
   // Milestone actions
   const toggleMilestone = (id: string) => {
@@ -391,24 +438,22 @@ Generated by Xweet Suite - Indian Freelance Command HQ
         }
       />
 
-      {/* Greeting & Live Indian Standard Time Command Strip */}
+      {/* Greeting & Live Time Command Strip */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-border/80 bg-gradient-to-r from-card via-card to-primary/5 p-3.5 sm:px-4 sm:py-3 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary">
-            <Sparkles className="h-5 w-5" />
-          </div>
+          <AppLogo variant="dark" size="md" />
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold text-foreground">
-                {greeting}, Rajvi
+                {greeting}, {settings.accountOwnerName.split(" ")[0]}
               </h2>
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live IST Sync
+                Live {settings.timezoneLabel.split(" ")[0]} Sync
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              {istDate} • <span className="font-mono font-medium text-foreground">{istTime}</span> IST
+              {istDate} • <span className="font-mono font-medium text-foreground">{istTime}</span> ({settings.country.code})
             </p>
           </div>
         </div>
@@ -450,15 +495,15 @@ Generated by Xweet Suite - Indian Freelance Command HQ
             </div>
             <div>
               <span className="text-xs font-semibold text-foreground">
-                Q3 Revenue Target: ₹20,00,000 (INR)
+                Q3 Revenue Target: {formatCurrency(2000000)} ({settings.currency.code})
               </span>
               <span className="text-[11px] text-muted-foreground ml-2">
-                72.5% Achieved (₹14,50,000 Collected)
+                72.5% Achieved ({formatCurrency(1450000)} Collected)
               </span>
             </div>
           </div>
           <span className="text-[11px] font-medium text-primary">
-            ₹5,50,000 to goal • 5 days remaining
+            {formatCompactCurrency(550000)} to goal • 5 days remaining
           </span>
         </div>
 
@@ -471,7 +516,7 @@ Generated by Xweet Suite - Indian Freelance Command HQ
         </div>
       </Card>
 
-      {/* KPI Stats Grid (in INR) */}
+      {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Revenue */}
         <Card className="hover:border-primary/40 transition-colors">
@@ -485,13 +530,13 @@ Generated by Xweet Suite - Indian Freelance Command HQ
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="text-2xl font-bold tracking-tight text-foreground font-mono">
-              ₹14,50,000
+              {formatCurrency(1450000)}
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="font-medium text-emerald-600 dark:text-emerald-400">
                 +14.2%
               </span>
-              <span>vs previous 30 days (INR)</span>
+              <span>vs previous 30 days ({settings.currency.code})</span>
             </div>
           </CardContent>
         </Card>
@@ -512,7 +557,7 @@ Generated by Xweet Suite - Indian Freelance Command HQ
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Badge variant="indigo" size="sm">
-                ₹6,50,000/mo steady
+                {formatCompactCurrency(650000)}/mo steady
               </Badge>
             </div>
           </CardContent>
@@ -530,7 +575,7 @@ Generated by Xweet Suite - Indian Freelance Command HQ
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="text-2xl font-bold tracking-tight text-foreground font-mono">
-              ₹38,20,000
+              {formatCurrency(3820000)}
             </div>
             <div className="text-xs text-muted-foreground">
               4 active deals in negotiation
@@ -561,6 +606,130 @@ Generated by Xweet Suite - Indian Freelance Command HQ
           </CardContent>
         </Card>
       </div>
+
+      {/* Pinned Follow-Up Reminders & Notes */}
+      {pinnedFollowUps.length > 0 && (
+        <Card className="border-primary/30 bg-gradient-to-r from-card via-card to-primary/5 shadow-xs">
+          <CardHeader className="pb-3 border-b border-border/60">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs shadow-2xs">
+                  <Pin className="h-4 w-4" />
+                </div>
+                <div>
+                  <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                    <span>Follow-Up Reminders & Pinned Notes</span>
+                    <Badge variant="indigo" size="sm">
+                      {pinnedFollowUps.length} Active
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    Client touchpoints and action items scheduled in your CRM
+                  </CardDescription>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="xs"
+                className="gap-1 text-xs text-primary hover:text-primary/80 cursor-pointer font-medium"
+                onClick={() => navigate("/leads")}
+              >
+                <span>View all in CRM</span>
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-3 sm:p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {pinnedFollowUps.map((lead) => {
+                const followUp = getFollowUpStatus(lead.nextFollowUpDate, lead.nextFollowUpTime)
+                const waUrl = getWhatsAppUrl(lead.phone, lead.contactPerson)
+
+                return (
+                  <div
+                    key={lead.id}
+                    onClick={() => navigate("/leads")}
+                    className="flex flex-col justify-between rounded-lg border border-border/80 bg-card p-3 shadow-2xs hover:border-primary/50 transition-all cursor-pointer space-y-2.5 group"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-1.5 mb-1.5">
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-xs text-foreground truncate group-hover:text-primary transition-colors">
+                            {lead.businessName}
+                          </h4>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {lead.contactPerson} • {lead.location}
+                          </p>
+                        </div>
+                        <Badge
+                          variant={followUp.isToday ? "warning" : "neutral"}
+                          size="sm"
+                          className="shrink-0 text-[10px]"
+                        >
+                          {followUp.label}
+                        </Badge>
+                      </div>
+
+                      {/* Reminder Note */}
+                      <div className="rounded-md bg-secondary/40 border border-border/50 p-2 text-xs text-foreground">
+                        <p className="line-clamp-2 text-[11px] text-muted-foreground italic">
+                          "{lead.dashboardNote || lead.notes || "Scheduled follow-up touchpoint"}"
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Quick action buttons */}
+                    <div
+                      className="flex items-center justify-between pt-1 border-t border-border/50 text-xs"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        {hasValidPhone(lead.phone) && (
+                          <a
+                            href={waUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors"
+                            title="Chat on WhatsApp"
+                          >
+                            <WhatsAppIcon className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                        {hasValidPhone(lead.phone) && (
+                          <a
+                            href={`tel:${lead.phone.replace(/\s+/g, "")}`}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded bg-secondary text-foreground hover:bg-muted transition-colors"
+                            title={`Call ${lead.phone}`}
+                          >
+                            <Phone className="h-3 w-3" />
+                          </a>
+                        )}
+                        {hasValidEmail(lead.email) && (
+                          <a
+                            href={`mailto:${lead.email}`}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded bg-secondary text-foreground hover:bg-muted transition-colors"
+                            title={`Email ${lead.email}`}
+                          >
+                            <Mail className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => dismissReminder(lead.id, e)}
+                        className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer px-1.5 py-0.5 rounded hover:bg-secondary transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Main Dashboard Section: 2 Columns */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">

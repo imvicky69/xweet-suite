@@ -17,14 +17,18 @@ import {
   ArrowUpDown,
   Building2,
   ExternalLink,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { LeadItem, LeadFormData, LeadStage, LeadPriority } from "@/types/lead"
+import { hasValidPhone, hasValidEmail } from "@/types/lead"
 import { initialMockLeads } from "@/data/mockLeads"
 import { LeadWidgets } from "@/components/leads/LeadWidgets"
 import { LeadFormDialog } from "@/components/leads/LeadFormDialog"
 import { LeadDetailsDialog, WhatsAppIcon } from "@/components/leads/LeadDetailsDialog"
-import { formatINR, getFollowUpStatus, getWhatsAppUrl } from "@/lib/formatters"
+import { getFollowUpStatus } from "@/lib/formatters"
+import { useWorkspace } from "@/context/WorkspaceContext"
 
 const stageBadgeVariant: Record<
   LeadStage,
@@ -50,6 +54,7 @@ const priorityBadgeVariant: Record<
 }
 
 export default function Leads() {
+  const { settings, formatCurrency, getWhatsAppUrl } = useWorkspace()
   const [leads, setLeads] = React.useState<LeadItem[]>(() => {
     const saved = localStorage.getItem("xweet_leads_mock")
     if (saved) {
@@ -66,6 +71,51 @@ export default function Leads() {
   React.useEffect(() => {
     localStorage.setItem("xweet_leads_mock", JSON.stringify(leads))
   }, [leads])
+
+  // View mode: active pipeline vs archived lists
+  const [viewMode, setViewMode] = React.useState<"active" | "archived">("active")
+
+  // Active vs Archived collections
+  const activeLeads = React.useMemo(() => leads.filter((l) => !l.isArchived), [leads])
+  const archivedLeads = React.useMemo(() => leads.filter((l) => Boolean(l.isArchived)), [leads])
+
+  // Archive / Restore handler
+  const handleToggleArchive = (leadId: string, shouldArchive: boolean) => {
+    const targetLead = leads.find((l) => l.id === leadId)
+    const now = new Date().toISOString().slice(0, 10)
+    setLeads((prev) =>
+      prev.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              isArchived: shouldArchive,
+              archivedAt: shouldArchive ? now : undefined,
+              showOnDashboard: shouldArchive ? false : l.showOnDashboard,
+            }
+          : l
+      )
+    )
+    if (shouldArchive) {
+      toast.success(`Archived "${targetLead?.businessName || "lead"}"`, {
+        description: "Moved to Archive Lists. Hidden from main active pipeline.",
+      })
+    } else {
+      toast.success(`Restored "${targetLead?.businessName || "lead"}"`, {
+        description: "Moved back to active pipeline.",
+      })
+    }
+    if (viewingLead && viewingLead.id === leadId) {
+      setViewingLead((prev) =>
+        prev
+          ? {
+              ...prev,
+              isArchived: shouldArchive,
+              archivedAt: shouldArchive ? now : undefined,
+            }
+          : null
+      )
+    }
+  }
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = React.useState("")
@@ -97,6 +147,7 @@ export default function Leads() {
         id: `lead-${Date.now()}`,
         createdAt: now.toISOString().slice(0, 10),
         lastContactIST: "Just now",
+        isArchived: false,
       }
       setLeads((prev) => [newLead, ...prev])
       toast.success(`Created lead: ${formData.businessName} (₹${formData.estimatedValue.toLocaleString("en-IN")})`)
@@ -129,9 +180,12 @@ export default function Leads() {
     }
   }
 
+  // Current lead pool based on active view mode
+  const currentPool = viewMode === "active" ? activeLeads : archivedLeads
+
   // Filter logic
   const filteredLeads = React.useMemo(() => {
-    return leads
+    return currentPool
       .filter((lead) => {
         if (selectedStage !== "all" && lead.status.toLowerCase() !== selectedStage.toLowerCase()) {
           return false
@@ -173,7 +227,7 @@ export default function Leads() {
         }
         return 0
       })
-  }, [leads, selectedStage, selectedPriority, selectedSource, searchQuery, sortBy])
+  }, [currentPool, selectedStage, selectedPriority, selectedSource, searchQuery, sortBy])
 
   // Reset filters
   const resetFilters = () => {
@@ -190,52 +244,163 @@ export default function Leads() {
     selectedPriority !== "all" ||
     selectedSource !== "all"
 
-  // Stage tab counters
+  // Stage tab counters based on current active view
   const stageCounts = React.useMemo(() => {
+    const pool = viewMode === "active" ? activeLeads : archivedLeads
     const counts: Record<string, number> = {
-      all: leads.length,
+      all: pool.length,
       new: 0,
       contacted: 0,
       "in discovery": 0,
       "proposal sent": 0,
       negotiation: 0,
       won: 0,
+      lost: 0,
     }
-    leads.forEach((l) => {
+    pool.forEach((l) => {
       const s = l.status.toLowerCase()
       if (counts[s] !== undefined) counts[s]++
     })
     return counts
-  }, [leads])
+  }, [viewMode, activeLeads, archivedLeads])
 
   return (
     <PageContainer>
       {/* Page Header */}
       <PageHeader
-        title="Leads & Outreach"
-        description="Comprehensive Indian lead pipeline, valuation in INR, and IST follow-up management."
+        title={viewMode === "active" ? "Leads & Outreach" : "Archived Leads"}
+        description={
+          viewMode === "active"
+            ? "Track prospect pipelines, deal valuations, and scheduled follow-ups."
+            : "Safely archived prospects and deferred deals, kept separate from your active pipeline."
+        }
         badge={
-          <Badge variant="indigo" size="sm">
-            {leads.length} Total Prospects
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="indigo" size="sm">
+              {activeLeads.length} Active
+            </Badge>
+            {archivedLeads.length > 0 && (
+              <Badge variant="outline" size="sm" className="text-muted-foreground border-border">
+                {archivedLeads.length} Archived
+              </Badge>
+            )}
+          </div>
         }
         actions={
-          <Button
-            size="sm"
-            onClick={() => {
-              setEditingLead(null)
-              setIsFormOpen(true)
-            }}
-            className="gap-1.5 cursor-pointer font-medium shadow-xs"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>Add Lead</span>
-          </Button>
+          viewMode === "active" ? (
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingLead(null)
+                setIsFormOpen(true)
+              }}
+              className="gap-1.5 cursor-pointer font-medium shadow-xs"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Add Lead</span>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setViewMode("active")
+                setSelectedStage("all")
+              }}
+              className="gap-1.5 cursor-pointer text-xs"
+            >
+              <ArchiveRestore className="h-3.5 w-3.5 text-primary" />
+              <span>Back to Active Pipeline</span>
+            </Button>
+          )
         }
       />
 
-      {/* Visual Widgets Deck */}
-      <LeadWidgets leads={leads} />
+      {/* View Switcher: Active Pipeline vs Archived Lists */}
+      <div className="flex items-center justify-between border-b border-border/70 pb-2.5">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode("active")
+              setSelectedStage("all")
+            }}
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              viewMode === "active"
+                ? "bg-primary text-primary-foreground shadow-2xs"
+                : "bg-secondary/60 text-muted-foreground hover:text-foreground hover:bg-secondary"
+            }`}
+          >
+            <span>Active Pipeline</span>
+            <span
+              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+                viewMode === "active" ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {activeLeads.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode("archived")
+              setSelectedStage("all")
+            }}
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              viewMode === "archived"
+                ? "bg-amber-600 text-white shadow-2xs"
+                : "bg-secondary/60 text-muted-foreground hover:text-foreground hover:bg-secondary"
+            }`}
+          >
+            <Archive className="h-3.5 w-3.5" />
+            <span>Archived Lists</span>
+            <span
+              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+                viewMode === "archived" ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {archivedLeads.length}
+            </span>
+          </button>
+        </div>
+
+        {viewMode === "archived" && archivedLeads.length > 0 && (
+          <span className="text-[11px] text-muted-foreground hidden sm:inline">
+            Archived leads are hidden from daily active views
+          </span>
+        )}
+      </div>
+
+      {/* Visual Widgets Deck (Active) or Archive Overview Banner */}
+      {viewMode === "active" ? (
+        <LeadWidgets leads={activeLeads} />
+      ) : (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+              <Archive className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-foreground text-sm">Archived Prospects Vault ({archivedLeads.length})</h3>
+              <p className="text-muted-foreground text-xs mt-0.5">
+                Archived prospects are preserved here and excluded from active deal totals, pipeline charts, and dashboard reminders.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setViewMode("active")
+              setSelectedStage("all")
+            }}
+            className="text-xs shrink-0 self-start sm:self-auto cursor-pointer"
+          >
+            Return to Active Pipeline
+          </Button>
+        </div>
+      )}
 
       {/* Filter and Search Bar Section */}
       <div className="space-y-2.5">
@@ -386,22 +551,47 @@ export default function Leads() {
 
       {/* Main Leads Container: Cards on Mobile (< md), Table on Desktop (>= md) */}
       {filteredLeads.length === 0 ? (
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden border border-border/80 shadow-2xs">
           <CardContent className="flex flex-col items-center justify-center p-12 text-center space-y-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-muted-foreground">
-              <Building2 className="h-6 w-6" />
+            <div
+              className={`flex h-12 w-12 items-center justify-center rounded-xl ${
+                viewMode === "archived"
+                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25"
+                  : "bg-secondary text-muted-foreground"
+              }`}
+            >
+              {viewMode === "archived" ? <Archive className="h-6 w-6" /> : <Building2 className="h-6 w-6" />}
             </div>
             <div className="space-y-1">
-              <h3 className="text-sm font-semibold text-foreground">No leads found</h3>
+              <h3 className="text-sm font-semibold text-foreground">
+                {viewMode === "archived" ? "No archived leads" : "No leads found"}
+              </h3>
               <p className="text-xs text-muted-foreground max-w-sm">
-                {hasActiveFilters
+                {viewMode === "archived"
+                  ? hasActiveFilters
+                    ? "No archived leads match your filter criteria."
+                    : "Your archive list is currently empty. Use the 'Archive' button on any active lead to safely store deferred prospects here without cluttering your pipeline."
+                  : hasActiveFilters
                   ? "Try adjusting your search criteria or resetting filters to see leads."
                   : "Your pipeline is currently empty. Click 'Add Lead' to record prospective clients."}
               </p>
             </div>
             {hasActiveFilters ? (
-              <Button variant="outline" size="sm" onClick={resetFilters} className="text-xs">
+              <Button variant="outline" size="sm" onClick={resetFilters} className="text-xs cursor-pointer">
                 Reset Filters
+              </Button>
+            ) : viewMode === "archived" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setViewMode("active")
+                  setSelectedStage("all")
+                }}
+                className="gap-1.5 text-xs cursor-pointer"
+              >
+                <ArchiveRestore className="h-3.5 w-3.5 text-primary" />
+                <span>Go to Active Pipeline</span>
               </Button>
             ) : (
               <Button
@@ -410,7 +600,7 @@ export default function Leads() {
                   setEditingLead(null)
                   setIsFormOpen(true)
                 }}
-                className="gap-1.5 text-xs"
+                className="gap-1.5 text-xs cursor-pointer font-medium shadow-xs"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Create First Lead</span>
@@ -470,10 +660,10 @@ export default function Leads() {
                   <div className="flex items-center justify-between rounded-md bg-secondary/40 p-2.5 text-xs">
                     <div>
                       <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">
-                        Estimated Value
+                        Estimated Value ({settings.currency.code})
                       </span>
                       <span className="font-mono font-bold text-sm text-foreground">
-                        {formatINR(lead.estimatedValue)}
+                        {formatCurrency(lead.estimatedValue)}
                       </span>
                     </div>
 
@@ -513,35 +703,49 @@ export default function Leads() {
                     className="flex items-center gap-1.5 pt-2 border-t border-border/60"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {/* Direct WhatsApp button */}
-                    <a
-                      href={waUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 py-1.5 px-2 text-xs font-semibold border border-emerald-600/30 transition-colors"
-                      title="Chat on WhatsApp"
-                    >
-                      <WhatsAppIcon className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>WhatsApp</span>
-                    </a>
+                    {/* Primary Direct action: WhatsApp if phone exists, else Email button */}
+                    {hasValidPhone(lead.phone) ? (
+                      <>
+                        <a
+                          href={waUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 py-1.5 px-2 text-xs font-semibold border border-emerald-600/30 transition-colors"
+                          title="Chat on WhatsApp"
+                        >
+                          <WhatsAppIcon className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>WhatsApp</span>
+                        </a>
 
-                    {/* Direct Phone Call */}
-                    <a
-                      href={`tel:${lead.phone.replace(/\s+/g, "")}`}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors shrink-0"
-                      title={`Call ${lead.phone}`}
-                    >
-                      <Phone className="h-3.5 w-3.5" />
-                    </a>
+                        <a
+                          href={`tel:${lead.phone.replace(/\s+/g, "")}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors shrink-0"
+                          title={`Call ${lead.phone}`}
+                        >
+                          <Phone className="h-3.5 w-3.5" />
+                        </a>
+                      </>
+                    ) : hasValidEmail(lead.email) ? (
+                      <a
+                        href={`mailto:${lead.email}`}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-primary/10 hover:bg-primary/20 text-primary py-1.5 px-2 text-xs font-semibold border border-primary/30 transition-colors"
+                        title={`Email ${lead.email}`}
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                        <span>Send Email</span>
+                      </a>
+                    ) : null}
 
-                    {/* Direct Email */}
-                    <a
-                      href={`mailto:${lead.email}`}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors shrink-0"
-                      title={`Email ${lead.email}`}
-                    >
-                      <Mail className="h-3.5 w-3.5" />
-                    </a>
+                    {/* Secondary Email icon button if phone was already primary */}
+                    {hasValidPhone(lead.phone) && hasValidEmail(lead.email) && (
+                      <a
+                        href={`mailto:${lead.email}`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors shrink-0"
+                        title={`Email ${lead.email}`}
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                      </a>
+                    )}
 
                     {/* View Details */}
                     <Button
@@ -567,52 +771,94 @@ export default function Leads() {
                     >
                       <Edit2 className="h-3.5 w-3.5" />
                     </Button>
+
+                    {/* Archive / Restore Button */}
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      className={`h-8 w-8 shrink-0 cursor-pointer ${
+                        viewMode === "active"
+                          ? "text-muted-foreground hover:text-amber-600 hover:border-amber-500/40"
+                          : "text-primary hover:border-primary bg-primary/5"
+                      }`}
+                      title={viewMode === "active" ? "Archive Lead" : "Restore to Active Pipeline"}
+                      onClick={() => handleToggleArchive(lead.id, viewMode === "active")}
+                    >
+                      {viewMode === "active" ? (
+                        <Archive className="h-3.5 w-3.5" />
+                      ) : (
+                        <ArchiveRestore className="h-3.5 w-3.5 text-primary" />
+                      )}
+                    </Button>
                   </div>
                 </div>
               )
             })}
           </div>
 
-          {/* DESKTOP VIEW (>= md): Full Structured Table */}
-          <Card className="hidden md:block overflow-hidden">
+          {/* DESKTOP VIEW (>= md): Full Structured Table with Professional Zebra Striping */}
+          <Card className="hidden md:block overflow-hidden border border-border/80 shadow-2xs rounded-xl">
             <CardContent className="p-0 overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-border/80 bg-muted/40 text-muted-foreground font-medium">
-                    <th className="py-2.5 px-4 font-medium">Company & Contact</th>
-                    <th className="py-2.5 px-3 font-medium hidden lg:table-cell">Service & Source</th>
-                    <th className="py-2.5 px-3 font-medium">Value (INR)</th>
-                    <th className="py-2.5 px-3 font-medium">Stage</th>
-                    <th className="py-2.5 px-3 font-medium hidden sm:table-cell">Priority</th>
-                    <th className="py-2.5 px-3 font-medium hidden lg:table-cell">
-                      Next Follow-up (IST)
-                    </th>
-                    <th className="py-2.5 px-4 font-medium text-right">Actions</th>
+                  <tr className="border-b border-border/80 bg-secondary/60 text-muted-foreground text-[11px] font-semibold uppercase tracking-wider select-none">
+                    <th className="py-3 px-4">Prospect & Decision Maker</th>
+                    <th className="py-3 px-3 hidden lg:table-cell">Deliverable Scope</th>
+                    <th className="py-3 px-3 font-mono">Deal Value ({settings.currency.code})</th>
+                    <th className="py-3 px-3">Stage</th>
+                    <th className="py-3 px-3 hidden sm:table-cell">Priority</th>
+                    <th className="py-3 px-3 hidden lg:table-cell">Next Follow-Up</th>
+                    <th className="py-3 px-4 text-right">Quick Outreach</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/60">
-                  {filteredLeads.map((lead) => {
+                <tbody className="divide-y divide-border/40">
+                  {filteredLeads.map((lead, idx) => {
                     const followUp = getFollowUpStatus(lead.nextFollowUpDate, lead.nextFollowUpTime)
                     const waUrl = getWhatsAppUrl(lead.phone, lead.contactPerson)
+                    const isEven = idx % 2 === 0
+                    const cleanFollowUp = followUp.label.replace(/\s*\(?IST\)?/g, "")
 
                     return (
                       <tr
                         key={lead.id}
-                        className="hover:bg-muted/30 transition-colors group cursor-pointer"
+                        className={`transition-colors duration-150 group cursor-pointer border-b border-border/40 ${
+                          isEven
+                            ? "bg-card"
+                            : "bg-muted/35"
+                        } hover:bg-primary/[0.04]`}
                         onClick={() => setViewingLead(lead)}
                       >
                         {/* Business & Contact */}
                         <td className="py-3 px-4">
-                          <div className="flex flex-col">
-                            <span className="font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
-                              {lead.businessName}
-                              {lead.website && (
-                                <ExternalLink className="h-2.5 w-2.5 text-muted-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              )}
-                            </span>
-                            <span className="text-[11px] text-muted-foreground">
-                              {lead.contactPerson} • {lead.location}
-                            </span>
+                          <div className="flex items-center gap-3">
+                            {/* Monogram Chip */}
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 border border-primary/20 text-primary font-bold text-xs group-hover:bg-primary group-hover:text-primary-foreground transition-colors shadow-2xs">
+                              {lead.businessName.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                                  {lead.businessName}
+                                </span>
+                                {lead.website && (
+                                  <a
+                                    href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-muted-foreground/60 hover:text-primary transition-colors"
+                                    title={`Visit ${lead.website}`}
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
+                                <span className="text-foreground/90 font-medium truncate">{lead.contactPerson}</span>
+                                <span>•</span>
+                                <span className="truncate">{lead.location}</span>
+                              </div>
+                            </div>
                           </div>
                         </td>
 
@@ -622,38 +868,44 @@ export default function Leads() {
                             <span className="truncate font-medium text-foreground">
                               {lead.serviceInterest}
                             </span>
-                            <span className="text-[11px] text-muted-foreground">
-                              {lead.source}
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <span className="inline-block h-1 w-1 rounded-full bg-muted-foreground/50" />
+                              {lead.industry} • via {lead.source}
                             </span>
                           </div>
                         </td>
 
-                        {/* Value in INR */}
+                        {/* Value in Workspace Currency */}
                         <td className="py-3 px-3">
-                          <div className="font-mono font-semibold text-foreground">
-                            {formatINR(lead.estimatedValue)}
+                          <div className="font-mono font-bold text-xs text-foreground group-hover:text-primary transition-colors">
+                            {formatCurrency(lead.estimatedValue)}
                           </div>
-                          <span className="text-[10px] text-muted-foreground">INR</span>
+                          <span className="text-[10px] text-muted-foreground/80 font-mono uppercase">
+                            {settings.currency.code}
+                          </span>
                         </td>
 
                         {/* Stage Badge */}
                         <td className="py-3 px-3">
-                          <Badge variant={stageBadgeVariant[lead.status]} size="sm">
+                          <Badge variant={stageBadgeVariant[lead.status]} size="sm" className="font-medium shadow-2xs">
                             {lead.status}
                           </Badge>
                         </td>
 
                         {/* Priority */}
                         <td className="py-3 px-3 hidden sm:table-cell">
-                          <Badge variant={priorityBadgeVariant[lead.priority]} size="sm">
+                          <Badge variant={priorityBadgeVariant[lead.priority]} size="sm" className="font-medium shadow-2xs">
                             {lead.priority}
                           </Badge>
                         </td>
 
-                        {/* Next Follow-up (IST) */}
+                        {/* Next Follow-up */}
                         <td className="py-3 px-3 hidden lg:table-cell">
                           <div className="flex items-center gap-1.5">
-                            <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
+                            {followUp.isToday && (
+                              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                            )}
+                            <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             <span
                               className={`font-medium ${
                                 followUp.isToday
@@ -663,51 +915,57 @@ export default function Leads() {
                                   : "text-foreground"
                               }`}
                             >
-                              {followUp.label}
+                              {cleanFollowUp}
                             </span>
                           </div>
                         </td>
 
-                        {/* Actions (WhatsApp, Call, Mail, View, Edit - NO exposed delete button) */}
+                        {/* Actions (WhatsApp, Call, Mail, View, Edit) */}
                         <td
                           className="py-3 px-4 text-right"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <div className="inline-flex items-center gap-1">
-                            {/* Direct WhatsApp button */}
-                            <a
-                              href={waUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 transition-colors"
-                              title="Chat on WhatsApp"
-                            >
-                              <WhatsAppIcon className="h-3.5 w-3.5" />
-                            </a>
+                            {/* Direct WhatsApp button (only if valid phone) */}
+                            {hasValidPhone(lead.phone) && (
+                              <a
+                                href={waUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 transition-all shadow-2xs"
+                                title="Chat on WhatsApp"
+                              >
+                                <WhatsAppIcon className="h-3.5 w-3.5" />
+                              </a>
+                            )}
 
-                            {/* Quick Phone Call */}
-                            <a
-                              href={`tel:${lead.phone.replace(/\s+/g, "")}`}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:border-border hover:bg-secondary hover:text-foreground transition-colors"
-                              title={`Call ${lead.phone}`}
-                            >
-                              <Phone className="h-3.5 w-3.5" />
-                            </a>
+                            {/* Quick Phone Call (only if valid phone) */}
+                            {hasValidPhone(lead.phone) && (
+                              <a
+                                href={`tel:${lead.phone.replace(/\s+/g, "")}`}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all shadow-2xs"
+                                title={`Call ${lead.phone}`}
+                              >
+                                <Phone className="h-3.5 w-3.5" />
+                              </a>
+                            )}
 
-                            {/* Quick Email */}
-                            <a
-                              href={`mailto:${lead.email}`}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:border-border hover:bg-secondary hover:text-foreground transition-colors"
-                              title={`Email ${lead.email}`}
-                            >
-                              <Mail className="h-3.5 w-3.5" />
-                            </a>
+                            {/* Quick Email (only if valid email) */}
+                            {hasValidEmail(lead.email) && (
+                              <a
+                                href={`mailto:${lead.email}`}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all shadow-2xs"
+                                title={`Email ${lead.email}`}
+                              >
+                                <Mail className="h-3.5 w-3.5" />
+                              </a>
+                            )}
 
                             {/* View details */}
                             <Button
                               variant="ghost"
                               size="icon-xs"
-                              className="text-muted-foreground hover:text-foreground"
+                              className="text-muted-foreground hover:text-foreground cursor-pointer"
                               title="View Details"
                               onClick={() => setViewingLead(lead)}
                             >
@@ -718,7 +976,7 @@ export default function Leads() {
                             <Button
                               variant="ghost"
                               size="icon-xs"
-                              className="text-muted-foreground hover:text-foreground"
+                              className="text-muted-foreground hover:text-foreground cursor-pointer"
                               title="Edit Lead"
                               onClick={() => {
                                 setEditingLead(lead)
@@ -727,6 +985,25 @@ export default function Leads() {
                             >
                               <Edit2 className="h-3.5 w-3.5" />
                             </Button>
+
+                            {/* Archive / Restore Quick Action */}
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              className={`cursor-pointer ${
+                                viewMode === "active"
+                                  ? "text-muted-foreground hover:text-amber-600 hover:bg-amber-500/10"
+                                  : "text-primary hover:bg-primary/10"
+                              }`}
+                              title={viewMode === "active" ? "Archive Lead (Move to Archive Lists)" : "Restore to Active Pipeline"}
+                              onClick={() => handleToggleArchive(lead.id, viewMode === "active")}
+                            >
+                              {viewMode === "active" ? (
+                                <Archive className="h-3.5 w-3.5" />
+                              ) : (
+                                <ArchiveRestore className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -734,6 +1011,19 @@ export default function Leads() {
                   })}
                 </tbody>
               </table>
+
+              {/* Table Footer Status Strip */}
+              <div className="border-t border-border/70 bg-secondary/20 px-4 py-2.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>
+                  Showing <strong className="text-foreground font-semibold">{filteredLeads.length}</strong> of {currentPool.length} {viewMode === "active" ? "active prospects" : "archived prospects"}
+                </span>
+                <span className="font-mono">
+                  {viewMode === "active" ? "Filtered Pipeline: " : "Archived Deals Value: "}
+                  <strong className="text-foreground font-semibold">
+                    {formatCurrency(filteredLeads.reduce((sum, l) => sum + (l.status !== "Lost" ? l.estimatedValue : 0), 0))}
+                  </strong>
+                </span>
+              </div>
             </CardContent>
           </Card>
         </>
@@ -747,7 +1037,7 @@ export default function Leads() {
         onSubmit={handleSaveLead}
       />
 
-      {/* View Lead Details Dialog (With safe delete button inside) */}
+      {/* View Lead Details Dialog (With safe delete & archive toggle inside) */}
       <LeadDetailsDialog
         lead={viewingLead}
         open={Boolean(viewingLead)}
@@ -758,6 +1048,7 @@ export default function Leads() {
         }}
         onStatusChange={handleStatusChange}
         onDelete={handleDeleteLead}
+        onArchiveToggle={handleToggleArchive}
       />
     </PageContainer>
   )
