@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "currency": "INR",
+  "currencySymbol": "₹",
+  "plans": [
+    {
+      "id": "free",
+      "name": "Forever Free",
+      "displayName": "Forever Free",
+      "tagline": "For solo founders & freelancers managing basic pipelines with set limits.",
+      "badge": "Forever Free",
+      "priceINR": 0,
+      "priceFormatted": "₹0",
+      "period": "forever basic",
+      "isPopular": false,
+      "hasTrial": false,
+      "trialDays": 0,
+      "maxMembers": 1,
+      "memberLimitText": "Solo (1 member only)",
+      "leadLimit": 15,
+      "leadLimitText": "Up to 15 active leads",
+      "pipelineLimit": 1,
+      "pipelineLimitText": "1 default pipeline",
+      "features": [
+        "Solo management with basic limits",
+        "Up to 15 active leads & deals",
+        "1 sensible default pipeline",
+        "Standard INR currency tracking",
+        "Basic deal & contact notes"
+      ],
+      "limitations": [
+        "Strictly 1 member (no team collaboration)",
+        "Limited to 15 leads total",
+        "No custom pipeline stages",
+        "No automated follow-up alarms"
+      ],
+      "capabilities": {
+        "teamMembers": 1,
+        "maxLeads": 15,
+        "customPipelines": false,
+        "whatsAppDirect": false,
+        "leadArchiveVault": false,
+        "smartFollowUpAlarms": false,
+        "exportCSV": false,
+        "prioritySupport": false
+      }
+    },
+    {
+      "id": "starter",
+      "name": "Starter",
+      "displayName": "Starter Tier",
+      "tagline": "For growing boutique studios & agencies with up to 5 team members.",
+      "badge": "Growing Teams",
+      "priceINR": 1499,
+      "priceFormatted": "₹1,499",
+      "period": "per month",
+      "isPopular": false,
+      "hasTrial": false,
+      "trialDays": 0,
+      "maxMembers": 5,
+      "memberLimitText": "Up to 5 team members",
+      "leadLimit": 150,
+      "leadLimitText": "Up to 150 active leads",
+      "pipelineLimit": 3,
+      "pipelineLimitText": "Up to 3 custom pipelines",
+      "features": [
+        "Collaborate with up to 5 team members",
+        "Up to 150 active leads & deals",
+        "Up to 3 custom pipelines & stages",
+        "1-Click WhatsApp & Phone triggers",
+        "Lead Archive & Vault access",
+        "Follow-up reminder calendar",
+        "Standard CSV data export"
+      ],
+      "limitations": [
+        "Max 5 team seats",
+        "Standard email support"
+      ],
+      "capabilities": {
+        "teamMembers": 5,
+        "maxLeads": 150,
+        "customPipelines": true,
+        "whatsAppDirect": true,
+        "leadArchiveVault": true,
+        "smartFollowUpAlarms": true,
+        "exportCSV": true,
+        "prioritySupport": false
+      }
+    },
+    {
+      "id": "pro",
+      "name": "Pro",
+      "displayName": "Pro (Ultimate)",
+      "tagline": "The ultimate command center with max capabilities, unlimited seats & full power.",
+      "badge": "14-Day Free Trial",
+      "priceINR": 3499,
+      "priceFormatted": "₹3,499",
+      "trialPriceFormatted": "₹0 for 14 days",
+      "period": "per month",
+      "isPopular": true,
+      "hasTrial": true,
+      "trialDays": 14,
+      "maxMembers": 999999,
+      "memberLimitText": "Unlimited team members",
+      "leadLimit": 999999,
+      "leadLimitText": "Unlimited active leads",
+      "pipelineLimit": 999999,
+      "pipelineLimitText": "Unlimited custom pipelines",
+      "features": [
+        "Unlimited team members & seats",
+        "Unlimited active leads & deal valuations",
+        "Unlimited custom pipelines & stage workflows",
+        "1-Click WhatsApp & Phone triggers with templates",
+        "Lead Archive & Vault with 1-click restore",
+        "Smart Follow-up Alarms & live activity strip",
+        "Full CSV / Excel export & deal reporting",
+        "Dedicated priority account support & 24/7 SLA"
+      ],
+      "limitations": [],
+      "capabilities": {
+        "teamMembers": -1,
+        "maxLeads": -1,
+        "customPipelines": true,
+        "whatsAppDirect": true,
+        "leadArchiveVault": true,
+        "smartFollowUpAlarms": true,
+        "exportCSV": true,
+        "prioritySupport": true
+      }
+    }
+  ]
+}

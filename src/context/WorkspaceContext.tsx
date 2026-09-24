@@ -46,6 +46,17 @@ export interface WorkspaceSettings {
   services: string[]
   cityPresets: string[]
   valuePresets: ValuePreset[]
+
+  // Subscription, Trial & Use Case
+  plan?: string
+  trialActive?: boolean
+  trialStartDate?: string
+  trialEndDate?: string
+  teamSize?: string
+  role?: string
+  useCase?: "Freelancing" | "Agency" | "Small Business" | "Sales" | "Other"
+  companyLogoUrl?: string
+  companyName?: string
 }
 
 export const COUNTRY_PRESETS: CountryConfig[] = [
@@ -224,6 +235,14 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   ],
   cityPresets: ["Bengaluru, KA", "Mumbai, MH", "Gurugram, HR", "Hyderabad, TS", "Pune, MH", "Delhi NCR"],
   valuePresets: getDefaultValuePresets("INR", "₹"),
+  plan: "Pro Trial",
+  trialActive: true,
+  trialStartDate: new Date().toISOString().slice(0, 10),
+  trialEndDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+  teamSize: "1-5",
+  role: "Agency Owner",
+  useCase: "Agency",
+  companyName: "Xweet Agency",
 }
 
 const STORAGE_KEY = "xweet_suite_workspace_settings_v1"

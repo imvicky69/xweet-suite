@@ -26,16 +26,15 @@ import {
   Download,
   Trash2,
   Mail,
-  ExternalLink,
   Target,
   StickyNote,
   Pin,
   Phone,
+  Sparkles,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useWorkspace } from "@/context/WorkspaceContext"
 import { AppLogo } from "@/components/ui/app-logo"
-import { initialMockLeads } from "@/data/mockLeads"
 import type { LeadItem } from "@/types/lead"
 import { hasValidPhone, hasValidEmail } from "@/types/lead"
 import { WhatsAppIcon } from "@/components/leads/LeadDetailsDialog"
@@ -57,95 +56,6 @@ interface QuickNoteItem {
   timestamp: string
 }
 
-interface ClientInquiry {
-  client: string
-  project: string
-  budget: string
-  status: string
-  badgeVariant: "indigo" | "neutral" | "success" | "warning" | "destructive"
-  date: string
-  email: string
-  location: string
-}
-
-const initialMilestones: Milestone[] = [
-  {
-    id: "m-1",
-    title: "Deliver finalized brand guidelines presentation",
-    client: "Aura Design Co.",
-    due: "Today, 5:00 PM IST",
-    urgent: true,
-    done: false,
-  },
-  {
-    id: "m-2",
-    title: "Review Hyperion auth module PR on GitHub",
-    client: "Hyperion Cloud SaaS",
-    due: "Tomorrow, 12:00 PM IST",
-    urgent: false,
-    done: false,
-  },
-  {
-    id: "m-3",
-    title: "Send retainer invoice #1042 (₹2,20,000)",
-    client: "Northwind Health Tech",
-    due: "Friday, Sep 26 IST",
-    urgent: false,
-    done: false,
-  },
-  {
-    id: "m-4",
-    title: "Initial kickoff alignment call on Google Meet",
-    client: "Kite Fintech Ventures",
-    due: "Completed",
-    urgent: false,
-    done: true,
-  },
-]
-
-const recentInquiries: ClientInquiry[] = [
-  {
-    client: "Aura Design Co.",
-    project: "Design System Architecture",
-    budget: "₹6,50,000",
-    status: "Proposal Sent",
-    badgeVariant: "indigo",
-    date: "Today, 04:00 PM IST",
-    email: "elena@auradesign.io",
-    location: "Mumbai, MH",
-  },
-  {
-    client: "Hyperion Cloud SaaS",
-    project: "Full-Stack MVP Development",
-    budget: "₹12,50,000",
-    status: "Discovery Call",
-    badgeVariant: "neutral",
-    date: "Today, 05:30 PM IST",
-    email: "marcus@hyperioncloud.dev",
-    location: "Bengaluru, KA",
-  },
-  {
-    client: "Kite Fintech Ventures",
-    project: "Brand Identity & Webflow",
-    budget: "₹4,80,000",
-    status: "Lead In",
-    badgeVariant: "neutral",
-    date: "Tomorrow, 11:00 AM IST",
-    email: "sofia@kitefin.vc",
-    location: "Gurugram, HR",
-  },
-  {
-    client: "Northwind Health Tech",
-    project: "SaaS UI/UX Revamp",
-    budget: "₹8,20,000",
-    status: "Contract Draft",
-    badgeVariant: "success",
-    date: "27 Sep, 03:00 PM IST",
-    email: "david@northwindhealth.in",
-    location: "Hyderabad, TS",
-  },
-]
-
 export default function Dashboard() {
   const navigate = useNavigate()
   const { settings, formatCurrency, formatCompactCurrency, getWhatsAppUrl } = useWorkspace()
@@ -158,8 +68,32 @@ export default function Dashboard() {
     } catch (e) {
       console.warn("Could not read leads for dashboard", e)
     }
-    return initialMockLeads
+    return []
   })
+
+  // Active leads pool
+  const activeLeads = React.useMemo(() => dashboardLeads.filter((l) => !l.isArchived), [dashboardLeads])
+
+  const wonRevenue = React.useMemo(
+    () =>
+      activeLeads
+        .filter((l) => l.status === "Won")
+        .reduce((sum, l) => sum + (l.estimatedValue || 0), 0),
+    [activeLeads]
+  )
+
+  const activePipelineValue = React.useMemo(
+    () =>
+      activeLeads
+        .filter((l) => l.status !== "Lost" && l.status !== "Won")
+        .reduce((sum, l) => sum + (l.estimatedValue || 0), 0),
+    [activeLeads]
+  )
+
+  const inDiscussionCount = React.useMemo(
+    () => activeLeads.filter((l) => l.status !== "Lost" && l.status !== "Won").length,
+    [activeLeads]
+  )
 
   // Filter pinned reminders or follow-ups (excluding archived leads)
   const pinnedFollowUps = React.useMemo(() => {
@@ -191,10 +125,10 @@ export default function Dashboard() {
       try {
         return JSON.parse(saved)
       } catch {
-        return initialMilestones
+        return []
       }
     }
-    return initialMilestones
+    return []
   })
 
   React.useEffect(() => {
@@ -208,24 +142,10 @@ export default function Dashboard() {
       try {
         return JSON.parse(saved)
       } catch {
-        return [
-          {
-            id: "note-1",
-            text: "Discuss multi-region AWS latency optimization with Marcus on today's 5:30 PM IST call.",
-            category: "Client Call",
-            timestamp: "Today, 10:15 AM IST",
-          },
-        ]
+        return []
       }
     }
-    return [
-      {
-        id: "note-1",
-        text: "Discuss multi-region AWS latency optimization with Marcus on today's 5:30 PM IST call.",
-        category: "Client Call",
-        timestamp: "Today, 10:15 AM IST",
-      },
-    ]
+    return []
   })
 
   React.useEffect(() => {
@@ -236,8 +156,6 @@ export default function Dashboard() {
   const [quickNoteOpen, setQuickNoteOpen] = React.useState(false)
   const [newNoteText, setNewNoteText] = React.useState("")
   const [newNoteCategory, setNewNoteCategory] = React.useState("General")
-
-  const [inquiryModalLead, setInquiryModalLead] = React.useState<ClientInquiry | null>(null)
 
   const [newMilestoneTitle, setNewMilestoneTitle] = React.useState("")
   const [newMilestoneClient, setNewMilestoneClient] = React.useState("")
@@ -447,6 +365,12 @@ Generated by Xweet Suite - Indian Freelance Command HQ
               <h2 className="text-sm font-semibold text-foreground">
                 {greeting}, {settings.accountOwnerName.split(" ")[0]}
               </h2>
+              {settings.trialActive && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  <Sparkles className="h-2.5 w-2.5" />
+                  14-Day Pro Trial Active
+                </span>
+              )}
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Live {settings.timezoneLabel.split(" ")[0]} Sync
@@ -468,7 +392,7 @@ Generated by Xweet Suite - Indian Freelance Command HQ
           >
             <span>Leads CRM</span>
             <Badge variant="indigo" size="sm">
-              8 Deals
+              {activeLeads.length} Deals
             </Badge>
           </Button>
 
@@ -480,38 +404,69 @@ Generated by Xweet Suite - Indian Freelance Command HQ
           >
             <span>Pipeline Board</span>
             <Badge variant="neutral" size="sm">
-              ₹65L
+              {formatCompactCurrency(activePipelineValue)}
             </Badge>
           </Button>
         </div>
       </div>
 
+      {/* Workspace Launchpad Banner for Starting Stage */}
+      {dashboardLeads.length === 0 && (
+        <Card className="p-4 sm:p-5 border-[#108a00]/30 bg-[#108a00]/5 dark:bg-[#108a00]/10 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-[#108a00] animate-pulse" />
+                <h3 className="text-sm font-bold text-foreground">
+                  Workspace Launchpad • Clean Starting Stage
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
+                Welcome to your command center, {settings.accountOwnerName.split(" ")[0]}! Your account has been initialized without any fake dummy leads. Click below to add your first real client prospect to start populating your financial pacing, pipeline stages, and follow-up alarms.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => navigate("/leads")}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-full bg-[#108a00] hover:bg-[#14a800] text-white text-xs font-semibold shadow-xs transition-all active:scale-[0.99] cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>+ Add Your First Lead</span>
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Revenue Goal & Monthly Pacing Progress Bar */}
       <Card className="p-4 border-primary/20 bg-gradient-to-r from-card via-card to-primary/5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
           <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#108a00] text-white text-xs">
               <Target className="h-3.5 w-3.5" />
             </div>
             <div>
               <span className="text-xs font-semibold text-foreground">
-                Q3 Revenue Target: {formatCurrency(2000000)} ({settings.currency.code})
+                Revenue Target: {formatCurrency(2000000)} ({settings.currency.code})
               </span>
               <span className="text-[11px] text-muted-foreground ml-2">
-                72.5% Achieved ({formatCurrency(1450000)} Collected)
+                {wonRevenue > 0
+                  ? `${Math.min(100, Math.round((wonRevenue / 2000000) * 100))}% Achieved (${formatCurrency(wonRevenue)} Collected)`
+                  : `0% Achieved (${formatCurrency(0)} Collected)`}
               </span>
             </div>
           </div>
-          <span className="text-[11px] font-medium text-primary">
-            {formatCompactCurrency(550000)} to goal • 5 days remaining
+          <span className="text-[11px] font-medium text-[#108a00]">
+            {formatCompactCurrency(Math.max(0, 2000000 - wonRevenue))} to goal
           </span>
         </div>
 
-        {/* Progress bar with electric blue accent and glow */}
+        {/* Progress bar */}
         <div className="relative h-2.5 w-full rounded-full bg-secondary overflow-hidden">
           <div
-            className="h-full rounded-full bg-primary transition-all duration-500 shadow-[0_0_12px_var(--accent-glow)]"
-            style={{ width: "72.5%" }}
+            className="h-full rounded-full bg-[#108a00] transition-all duration-500 shadow-[0_0_12px_rgba(16,138,0,0.3)]"
+            style={{ width: `${Math.min(100, Math.max(0, Math.round((wonRevenue / 2000000) * 100)))}%` }}
           />
         </div>
       </Card>
@@ -530,13 +485,13 @@ Generated by Xweet Suite - Indian Freelance Command HQ
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="text-2xl font-bold tracking-tight text-foreground font-mono">
-              {formatCurrency(1450000)}
+              {formatCurrency(wonRevenue)}
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                +14.2%
+              <span className={`font-medium ${wonRevenue > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+                {wonRevenue > 0 ? "+14.2% pacing" : "Starting stage"}
               </span>
-              <span>vs previous 30 days ({settings.currency.code})</span>
+              <span>• {wonRevenue > 0 ? `collected (${settings.currency.code})` : "0 closed deals"}</span>
             </div>
           </CardContent>
         </Card>
@@ -553,12 +508,16 @@ Generated by Xweet Suite - Indian Freelance Command HQ
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="text-2xl font-bold tracking-tight text-foreground">
-              6 Clients
+              {activeLeads.length} Clients
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Badge variant="indigo" size="sm">
-                {formatCompactCurrency(650000)}/mo steady
-              </Badge>
+              {activeLeads.length > 0 ? (
+                <Badge variant="indigo" size="sm">
+                  {formatCompactCurrency(activePipelineValue)} in active cycle
+                </Badge>
+              ) : (
+                <span>Starting stage • No active accounts</span>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -575,10 +534,12 @@ Generated by Xweet Suite - Indian Freelance Command HQ
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="text-2xl font-bold tracking-tight text-foreground font-mono">
-              {formatCurrency(3820000)}
+              {formatCurrency(activePipelineValue)}
             </div>
             <div className="text-xs text-muted-foreground">
-              4 active deals in negotiation
+              {activeLeads.length > 0
+                ? `${inDiscussionCount} active in discussion`
+                : "Starting stage • Empty pipeline"}
             </div>
           </CardContent>
         </Card>
@@ -598,10 +559,10 @@ Generated by Xweet Suite - Indian Freelance Command HQ
               {pendingMilestonesCount} Remaining
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="font-medium text-amber-600 dark:text-amber-400">
-                1 due today
+              <span className={`font-medium ${pendingMilestonesCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                {pendingMilestonesCount > 0 ? `${pendingMilestonesCount} pending` : "All caught up"}
               </span>
-              <span>by 5:00 PM IST</span>
+              <span>• {pendingMilestonesCount > 0 ? "track deadlines" : "0 overdue"}</span>
             </div>
           </CardContent>
         </Card>
@@ -755,32 +716,57 @@ Generated by Xweet Suite - Indian Freelance Command HQ
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="divide-y divide-border/60">
-              {recentInquiries.map((item, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => setInquiryModalLead(item)}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer group"
-                >
-                  <div className="min-w-0 space-y-0.5">
-                    <p className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                      {item.client}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground truncate">
-                      {item.project} • <span className="font-mono font-medium text-foreground">{item.budget}</span>
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    <Badge variant={item.badgeVariant} size="sm">
-                      {item.status}
-                    </Badge>
-                    <span className="text-[11px] text-muted-foreground/80 hidden sm:inline">
-                      {item.date}
-                    </span>
-                  </div>
+            {dashboardLeads.length === 0 ? (
+              <div className="p-8 text-center space-y-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#108a00]/10 text-[#108a00] mx-auto border border-[#108a00]/20">
+                  <Briefcase className="h-6 w-6 text-[#108a00]" />
                 </div>
-              ))}
-            </div>
+                <div className="space-y-1 max-w-sm mx-auto">
+                  <h4 className="text-sm font-bold text-foreground">Starting Stage • Zero Active Leads</h4>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Your command center is clean. Add your prospective clients to track real-time deal valuations, pipeline stages, and follow-up touchpoints.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/leads")}
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-full bg-[#108a00] hover:bg-[#14a800] text-white text-xs font-semibold shadow-xs transition-all active:scale-[0.99] cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>+ Add First Client Lead</span>
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {dashboardLeads.slice(0, 5).map((lead) => (
+                  <div
+                    key={lead.id}
+                    onClick={() => navigate("/leads")}
+                    className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer group"
+                  >
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="text-xs font-semibold text-foreground group-hover:text-[#108a00] transition-colors truncate">
+                        {lead.businessName}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {lead.serviceInterest} •{" "}
+                        <span className="font-mono font-medium text-foreground">
+                          {formatCurrency(lead.estimatedValue)}
+                        </span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <Badge variant="indigo" size="sm">
+                        {lead.status}
+                      </Badge>
+                      <span className="text-[11px] text-muted-foreground/80 hidden sm:inline">
+                        {lead.location}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -845,52 +831,75 @@ Generated by Xweet Suite - Indian Freelance Command HQ
               </form>
             )}
 
-            <div className="divide-y divide-border/60">
-              {milestones.map((task) => (
-                <div
-                  key={task.id}
-                  onClick={() => toggleMilestone(task.id)}
-                  className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer group"
-                >
-                  {task.done ? (
-                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-primary shrink-0 transition-transform active:scale-90" />
-                  ) : (
-                    <Circle className="h-4 w-4 mt-0.5 text-muted-foreground/70 shrink-0 hover:text-primary transition-transform active:scale-90" />
-                  )}
-
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <p
-                      className={`text-xs font-medium transition-all ${
-                        task.done
-                          ? "line-through text-muted-foreground"
-                          : "text-foreground group-hover:text-primary"
-                      }`}
-                    >
-                      {task.title}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {task.client} • {task.due}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    {task.urgent && !task.done && (
-                      <Badge variant="warning" size="sm">
-                        Urgent
-                      </Badge>
-                    )}
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteMilestone(task.id, e)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-destructive transition-opacity"
-                      title="Remove"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
+            {milestones.length === 0 ? (
+              <div className="p-8 text-center space-y-2.5 flex-1 flex flex-col items-center justify-center">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-secondary text-muted-foreground mx-auto">
+                  <CheckCircle2 className="h-5 w-5" />
                 </div>
-              ))}
-            </div>
+                <div className="space-y-0.5 max-w-xs mx-auto">
+                  <h4 className="text-xs font-semibold text-foreground">No Pending Deliverables</h4>
+                  <p className="text-[11px] text-muted-foreground">
+                    Keep project deadlines and sprints organized by adding key milestones.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => setShowAddMilestone(true)}
+                  className="text-xs gap-1 cursor-pointer mt-1"
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>Add First Milestone</span>
+                </Button>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {milestones.map((task) => (
+                  <div
+                    key={task.id}
+                    onClick={() => toggleMilestone(task.id)}
+                    className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer group"
+                  >
+                    {task.done ? (
+                      <CheckCircle2 className="h-4 w-4 mt-0.5 text-primary shrink-0 transition-transform active:scale-90" />
+                    ) : (
+                      <Circle className="h-4 w-4 mt-0.5 text-muted-foreground/70 shrink-0 hover:text-primary transition-transform active:scale-90" />
+                    )}
+
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p
+                        className={`text-xs font-medium transition-all ${
+                          task.done
+                            ? "line-through text-muted-foreground"
+                            : "text-foreground group-hover:text-primary"
+                        }`}
+                      >
+                        {task.title}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {task.client} • {task.due}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {task.urgent && !task.done && (
+                        <Badge variant="warning" size="sm">
+                          Urgent
+                        </Badge>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteMilestone(task.id, e)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-destructive transition-opacity"
+                        title="Remove"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -994,78 +1003,6 @@ Generated by Xweet Suite - Indian Freelance Command HQ
               Done
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Client Inquiry Preview Modal */}
-      <Dialog
-        open={Boolean(inquiryModalLead)}
-        onOpenChange={(open) => !open && setInquiryModalLead(null)}
-      >
-        <DialogContent maxWidth="max-w-md">
-          {inquiryModalLead && (
-            <>
-              <DialogHeader>
-                <div className="flex items-center justify-between">
-                  <DialogTitle>{inquiryModalLead.client}</DialogTitle>
-                  <Badge variant={inquiryModalLead.badgeVariant} size="sm">
-                    {inquiryModalLead.status}
-                  </Badge>
-                </div>
-                <DialogDescription>
-                  {inquiryModalLead.location} • Inquired {inquiryModalLead.date}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-3 py-3 text-xs">
-                <div className="rounded-lg border border-border bg-secondary/30 p-3">
-                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground block">
-                    Estimated Deal Budget (INR)
-                  </span>
-                  <div className="text-2xl font-bold font-mono text-foreground">
-                    {inquiryModalLead.budget}
-                  </div>
-                  <span className="text-muted-foreground text-[11px]">
-                    Scope: {inquiryModalLead.project}
-                  </span>
-                </div>
-
-                <div className="rounded-lg border border-border/80 bg-card p-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-3.5 w-3.5 text-primary" />
-                    <span>{inquiryModalLead.email}</span>
-                  </div>
-                  <a
-                    href={`mailto:${inquiryModalLead.email}`}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Send Mail
-                  </a>
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setInquiryModalLead(null)}
-                >
-                  Close
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setInquiryModalLead(null)
-                    navigate("/leads")
-                  }}
-                  className="gap-1 text-xs cursor-pointer"
-                >
-                  <span>Open in Leads CRM</span>
-                  <ExternalLink className="h-3 w-3" />
-                </Button>
-              </DialogFooter>
-            </>
-          )}
         </DialogContent>
       </Dialog>
     </PageContainer>

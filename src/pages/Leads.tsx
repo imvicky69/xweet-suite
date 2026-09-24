@@ -61,10 +61,10 @@ export default function Leads() {
       try {
         return JSON.parse(saved)
       } catch {
-        return initialMockLeads
+        return []
       }
     }
-    return initialMockLeads
+    return []
   })
 
   // Sync with localStorage
@@ -552,25 +552,39 @@ export default function Leads() {
       {/* Main Leads Container: Cards on Mobile (< md), Table on Desktop (>= md) */}
       {filteredLeads.length === 0 ? (
         <Card className="overflow-hidden border border-border/80 shadow-2xs">
-          <CardContent className="flex flex-col items-center justify-center p-12 text-center space-y-3">
+          <CardContent className="flex flex-col items-center justify-center p-10 sm:p-14 text-center space-y-4">
             <div
-              className={`flex h-12 w-12 items-center justify-center rounded-xl ${
+              className={`flex h-14 w-14 items-center justify-center rounded-2xl ${
                 viewMode === "archived"
                   ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25"
+                  : leads.length === 0
+                  ? "bg-[#108a00]/10 text-[#108a00] border border-[#108a00]/20"
                   : "bg-secondary text-muted-foreground"
               }`}
             >
-              {viewMode === "archived" ? <Archive className="h-6 w-6" /> : <Building2 className="h-6 w-6" />}
+              {viewMode === "archived" ? (
+                <Archive className="h-7 w-7" />
+              ) : leads.length === 0 ? (
+                <Building2 className="h-7 w-7 text-[#108a00]" />
+              ) : (
+                <Building2 className="h-6 w-6" />
+              )}
             </div>
-            <div className="space-y-1">
-              <h3 className="text-sm font-semibold text-foreground">
-                {viewMode === "archived" ? "No archived leads" : "No leads found"}
+            <div className="space-y-1.5 max-w-md">
+              <h3 className="text-base font-bold text-foreground">
+                {viewMode === "archived"
+                  ? "No archived leads"
+                  : leads.length === 0
+                  ? "Your Pipeline is Fresh & Ready"
+                  : "No matching leads found"}
               </h3>
-              <p className="text-xs text-muted-foreground max-w-sm">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 {viewMode === "archived"
                   ? hasActiveFilters
                     ? "No archived leads match your filter criteria."
                     : "Your archive list is currently empty. Use the 'Archive' button on any active lead to safely store deferred prospects here without cluttering your pipeline."
+                  : leads.length === 0
+                  ? "You are at the starting stage of your workspace. No fake data or dummy records—populate your account with your real prospective clients and deal scopes."
                   : hasActiveFilters
                   ? "Try adjusting your search criteria or resetting filters to see leads."
                   : "Your pipeline is currently empty. Click 'Add Lead' to record prospective clients."}
@@ -594,17 +608,33 @@ export default function Leads() {
                 <span>Go to Active Pipeline</span>
               </Button>
             ) : (
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditingLead(null)
-                  setIsFormOpen(true)
-                }}
-                className="gap-1.5 text-xs cursor-pointer font-medium shadow-xs"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Create First Lead</span>
-              </Button>
+              <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingLead(null)
+                    setIsFormOpen(true)
+                  }}
+                  className="inline-flex items-center justify-center gap-2 h-10 px-5 rounded-full bg-[#108a00] hover:bg-[#14a800] text-white text-xs font-semibold shadow-xs transition-all active:scale-[0.99] cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>+ Add Your First Lead</span>
+                </button>
+                {leads.length === 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setLeads(initialMockLeads)
+                      toast.success("Loaded 8 starter sample leads for testing")
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    <span>Load Sample Data</span>
+                  </Button>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
