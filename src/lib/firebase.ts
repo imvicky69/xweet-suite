@@ -10,6 +10,7 @@ import {
   getDoc,
   serverTimestamp,
 } from "firebase/firestore"
+import { getFunctions, httpsCallable } from "firebase/functions"
 
 const firebaseConfig = {
   apiKey:
@@ -42,6 +43,7 @@ const firebaseConfig = {
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+export const functions = getFunctions(app, "asia-south2")
 export const googleProvider = new GoogleAuthProvider()
 
 googleProvider.setCustomParameters({
@@ -182,3 +184,39 @@ export async function getWorkspaceFromFirestore(userId: string) {
     return null
   }
 }
+
+/**
+ * Call the completeUserSignup Cloud Function with automatic Firestore fallback
+ */
+export async function callCompleteUserSignup(data: WorkspaceFirestoreData) {
+  try {
+    const completeFn = httpsCallable(functions, "completeUserSignup")
+    const res = await completeFn(data)
+    return { success: true, result: res.data }
+  } catch (fnError) {
+    console.warn("completeUserSignup Cloud Function fallback to direct Firestore:", fnError)
+    const uid = data.uid || auth.currentUser?.uid || `user-${Date.now()}`
+    return await saveWorkspaceToFirestore(uid, data)
+  }
+}
+
+/**
+ * Call the inviteCoworker Cloud Function with automatic Firestore fallback
+ */
+export async function callInviteCoworker(data: {
+  email: string
+  fullName: string
+  role: string
+  title: string
+  department: string
+}) {
+  try {
+    const inviteFn = httpsCallable(functions, "inviteCoworker")
+    const res = await inviteFn(data)
+    return { success: true, result: res.data }
+  } catch (err) {
+    console.warn("inviteCoworker Cloud Function fallback:", err)
+    return { success: false, error: err }
+  }
+}
+

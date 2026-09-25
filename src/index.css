@@ -55,10 +55,10 @@
   --card-foreground: #0f172a;
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  --primary: #2563EB;
+  --primary: #108a00;
   --primary-foreground: #ffffff;
-  --accent: #2563EB;
-  --accent-glow: #3B82F6;
+  --accent: #108a00;
+  --accent-glow: #14a800;
   --accent-foreground: #ffffff;
   --secondary: #f1f5f9;
   --secondary-foreground: #1e293b;
@@ -68,23 +68,23 @@
   --destructive-foreground: #ffffff;
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #2563EB;
+  --ring: #108a00;
   --radius: 0.375rem;
 
   --sidebar: #ffffff;
   --sidebar-foreground: #1e293b;
-  --sidebar-primary: #2563EB;
+  --sidebar-primary: #108a00;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eff6ff;
-  --sidebar-accent-foreground: #1d4ed8;
+  --sidebar-accent: #f0fdf4;
+  --sidebar-accent-foreground: #108a00;
   --sidebar-border: #e2e8f0;
-  --sidebar-ring: #2563EB;
+  --sidebar-ring: #108a00;
 
-  --chart-1: #2563EB;
-  --chart-2: #3B82F6;
-  --chart-3: #60A5FA;
-  --chart-4: #93C5FD;
-  --chart-5: #BFDBFE;
+  --chart-1: #108a00;
+  --chart-2: #14a800;
+  --chart-3: #22c55e;
+  --chart-4: #4ade80;
+  --chart-5: #86efac;
 }
 
 .dark {
@@ -94,10 +94,10 @@
   --card-foreground: #f8fafc;
   --popover: #0f172a;
   --popover-foreground: #f8fafc;
-  --primary: #3B82F6;
+  --primary: #14a800;
   --primary-foreground: #ffffff;
-  --accent: #2563EB;
-  --accent-glow: #3B82F6;
+  --accent: #14a800;
+  --accent-glow: #108a00;
   --accent-foreground: #ffffff;
   --secondary: #1e293b;
   --secondary-foreground: #f8fafc;
@@ -107,22 +107,22 @@
   --destructive-foreground: #ffffff;
   --border: #1e293b;
   --input: #1e293b;
-  --ring: #3B82F6;
+  --ring: #14a800;
 
   --sidebar: #0b1120;
   --sidebar-foreground: #f8fafc;
-  --sidebar-primary: #3B82F6;
+  --sidebar-primary: #14a800;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1e293b;
-  --sidebar-accent-foreground: #93c5fd;
+  --sidebar-accent: #112817;
+  --sidebar-accent-foreground: #4ade80;
   --sidebar-border: #1e293b;
-  --sidebar-ring: #3B82F6;
+  --sidebar-ring: #14a800;
 
-  --chart-1: #3B82F6;
-  --chart-2: #60A5FA;
-  --chart-3: #93C5FD;
-  --chart-4: #2563EB;
-  --chart-5: #1D4ED8;
+  --chart-1: #14a800;
+  --chart-2: #22c55e;
+  --chart-3: #4ade80;
+  --chart-4: #108a00;
+  --chart-5: #0d7000;
 }
 
 @layer base {

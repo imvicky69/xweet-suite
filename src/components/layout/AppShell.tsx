@@ -1,5 +1,5 @@
 import * as React from "react"
-import { NavLink, useLocation } from "react-router-dom"
+import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import {
   LayoutDashboard,
   Users,
@@ -13,13 +13,17 @@ import {
   X,
   ChevronDown,
   Command,
+  LogOut,
+  Building2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "cn"
-import { Toaster } from "sonner"
+import { toast, Toaster } from "sonner"
 import { useWorkspace } from "@/context/WorkspaceContext"
 import { AppLogo } from "@/components/ui/app-logo"
+import { auth } from "@/lib/firebase"
+import { signOut } from "firebase/auth"
 
 interface AppShellProps {
   children: React.ReactNode
@@ -79,14 +83,55 @@ const secondaryNavItems = [
 ]
 
 export function AppShell({ children }: AppShellProps) {
+  const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
+  const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
+  const profileMenuRef = React.useRef<HTMLDivElement>(null)
   const location = useLocation()
   const { settings } = useWorkspace()
 
-  // Close mobile sidebar on route change
+  // Close mobile sidebar and profile dropdown on route change
   React.useEffect(() => {
     setMobileMenuOpen(false)
+    setProfileMenuOpen(false)
   }, [location.pathname])
+
+  // Click outside and escape key handling for profile menu
+  React.useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setProfileMenuOpen(false)
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setProfileMenuOpen(false)
+      }
+    }
+    if (profileMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside)
+      document.addEventListener("keydown", handleKeyDown)
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [profileMenuOpen])
+
+  // Handle Firebase and local logout
+  const handleLogout = async () => {
+    setProfileMenuOpen(false)
+    setMobileMenuOpen(false)
+    try {
+      await signOut(auth)
+      toast.success("Logged out successfully")
+    } catch (err) {
+      console.warn("Firebase signout error:", err)
+      toast.success("Logged out")
+    } finally {
+      navigate("/login")
+    }
+  }
 
   // Live clock ticker right beside currency
   const [liveTime, setLiveTime] = React.useState("")
@@ -310,27 +355,100 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </div>
 
-        {/* Sidebar Footer: User / Status */}
-        <div className="border-t border-border/80 p-3">
-          <NavLink to="/settings" className="block">
-            <div className="flex items-center justify-between rounded-md border border-border/60 bg-card p-2 hover:bg-secondary/50 transition-colors cursor-pointer">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-xs font-semibold text-foreground">
+        {/* Sidebar Footer: User / Profile Menu */}
+        <div className="relative border-t border-border/80 p-3" ref={profileMenuRef}>
+          {/* Profile Dropdown Popover */}
+          {profileMenuOpen && (
+            <div className="absolute bottom-full left-3 right-3 mb-2 z-50 rounded-xl border border-border/80 bg-card/95 p-1.5 shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
+              {/* User Info Header */}
+              <div className="flex items-start gap-3 p-2.5 rounded-lg bg-secondary/50 border border-border/40">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-primary/10 text-xs font-bold text-primary">
                   {initials}
                 </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="truncate text-xs font-medium text-foreground leading-tight">
-                    {settings.accountOwnerName}
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate text-xs font-semibold text-foreground">
+                      {settings.accountOwnerName}
+                    </span>
+                    <span className="shrink-0 rounded-full bg-emerald-500/10 px-1.5 py-0.2 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 capitalize">
+                      {settings.plan || "Pro"}
+                    </span>
+                  </div>
+                  <span className="truncate text-[11px] text-muted-foreground">
+                    {settings.accountEmail || auth.currentUser?.email || "account@xweet.io"}
                   </span>
-                  <span className="truncate text-[10px] text-muted-foreground flex items-center gap-1">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    {settings.country.code} · Active
-                  </span>
+                  {settings.workspaceName && (
+                    <span className="truncate text-[10px] text-muted-foreground/80 mt-1 flex items-center gap-1 font-medium">
+                      <Building2 className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      {settings.workspaceName}
+                    </span>
+                  )}
                 </div>
               </div>
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+
+              {/* Menu Links */}
+              <div className="mt-1.5 space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileMenuOpen(false)
+                    navigate("/settings")
+                  }}
+                  className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-foreground hover:bg-secondary/70 transition-colors cursor-pointer text-left"
+                >
+                  <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Workspace Settings</span>
+                </button>
+              </div>
+
+              <div className="my-1 border-t border-border/60" />
+
+              {/* Logout Option */}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-red-600 hover:bg-red-500/10 dark:text-red-400 transition-colors cursor-pointer text-left"
+              >
+                <LogOut className="h-3.5 w-3.5 text-red-500" />
+                <span>Log out</span>
+              </button>
             </div>
-          </NavLink>
+          )}
+
+          {/* Profile Trigger Button */}
+          <button
+            type="button"
+            onClick={() => setProfileMenuOpen((prev) => !prev)}
+            aria-expanded={profileMenuOpen}
+            aria-haspopup="true"
+            className={cn(
+              "w-full flex items-center justify-between rounded-lg border p-2 transition-all cursor-pointer text-left",
+              profileMenuOpen
+                ? "border-primary/50 bg-secondary/80 ring-1 ring-primary/20 shadow-xs"
+                : "border-border/60 bg-card hover:bg-secondary/50"
+            )}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-xs font-semibold text-foreground">
+                {initials}
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="truncate text-xs font-medium text-foreground leading-tight">
+                  {settings.accountOwnerName}
+                </span>
+                <span className="truncate text-[10px] text-muted-foreground flex items-center gap-1">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  {settings.country.code} · Active
+                </span>
+              </div>
+            </div>
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200",
+                profileMenuOpen && "rotate-180 text-foreground"
+              )}
+            />
+          </button>
         </div>
       </aside>
 

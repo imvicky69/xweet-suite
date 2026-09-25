@@ -9,12 +9,13 @@ import { toast } from "sonner"
 import {
   auth,
   googleProvider,
-  saveWorkspaceToFirestore,
   saveUserToFirestore,
   getWorkspaceFromFirestore,
+  callCompleteUserSignup,
   USE_CASE_PIPELINES,
 } from "@/lib/firebase"
 import { PLANS, getPlanById } from "@/lib/plans"
+import { createAdminUser, saveWorkspaceUsers } from "@/data/users"
 import {
   signInWithPopup,
   signInWithEmailAndPassword,
@@ -176,7 +177,7 @@ export default function AuthPage({ initialMode }: AuthPageProps) {
 
     if (score <= 1) return { score: 1, label: "Weak", color: "bg-red-500" }
     if (score === 2) return { score: 2, label: "Fair", color: "bg-amber-500" }
-    if (score === 3) return { score: 3, label: "Good", color: "bg-blue-500" }
+    if (score === 3) return { score: 3, label: "Good", color: "bg-[#108a00]" }
     return { score: 4, label: "Strong", color: "bg-emerald-500" }
   }, [password])
 
@@ -377,13 +378,20 @@ export default function AuthPage({ initialMode }: AuthPageProps) {
     }
 
     const uid = authUid || auth.currentUser?.uid || `user-${Date.now()}`
-    await saveWorkspaceToFirestore(uid, workspaceData)
+    await callCompleteUserSignup({ ...workspaceData, uid })
 
     // Give user the clean starting stage of app - empty state instead of prefilling fake dummy leads
     try {
       localStorage.setItem("xweet_leads_mock", JSON.stringify([]))
       localStorage.setItem("xweet_dashboard_milestones", JSON.stringify([]))
       localStorage.setItem("xweet_dashboard_notes", JSON.stringify([]))
+      const adminMember = createAdminUser({
+        id: uid,
+        email: workspaceData.email,
+        fullName: workspaceData.accountOwnerName,
+        title: workspaceData.role || "Founder & Workspace Admin",
+      })
+      saveWorkspaceUsers([adminMember])
     } catch (e) {
       console.warn("Storage reset fallback:", e)
     }
