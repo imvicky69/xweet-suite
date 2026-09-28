@@ -45,9 +45,12 @@ import {
   Send,
   Trash2,
   Briefcase,
+  Loader2,
+  Upload,
 } from "lucide-react"
 import { AppLogo } from "@/components/ui/app-logo"
-import { auth } from "@/lib/firebase"
+import { auth, storage } from "@/lib/firebase"
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { signOut } from "firebase/auth"
 import {
   getWorkspaceUsers,
@@ -78,6 +81,8 @@ export default function Settings() {
     formatCurrency,
     formatCompactCurrency,
     formatPhoneNumber,
+    isSyncing,
+    pipelineTemplates,
   } = useWorkspace()
 
   // Active Tab
@@ -113,6 +118,36 @@ export default function Settings() {
 
   // Live test phone preview
   const [testPhoneInput, setTestPhoneInput] = React.useState("9876543210")
+
+  // Logo upload state
+  const [isUploadingLogo, setIsUploadingLogo] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Limit size to 2MB
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("File size must be less than 2MB")
+      return
+    }
+
+    setIsUploadingLogo(true)
+    try {
+      const storageRef = ref(storage, `workspaces/${auth.currentUser?.uid || "shared"}/logo_${Date.now()}`)
+      await uploadBytes(storageRef, file)
+      const downloadUrl = await getDownloadURL(storageRef)
+      handleChange("companyLogoUrl", downloadUrl)
+      toast.success("Logo uploaded successfully")
+    } catch (error) {
+      console.error("Upload error:", error)
+      toast.error("Failed to upload logo")
+    } finally {
+      setIsUploadingLogo(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
 
   // Sync if context updates externally
   React.useEffect(() => {
@@ -203,11 +238,11 @@ export default function Settings() {
   }
 
   // Save handler
-  const handleSave = () => {
-    updateSettings(formData)
+  const handleSave = async () => {
+    await updateSettings(formData)
     setHasChanges(false)
-    toast.success("Workspace preferences saved!", {
-      description: "User profile, currency, and deal settings have been updated.",
+    toast.success("Workspace preferences saved to cloud!", {
+      description: "Preferences are synced with your user account in Firestore.",
     })
   }
 
@@ -417,6 +452,10 @@ export default function Settings() {
             <Badge variant="indigo" size="sm" className="font-medium">
               {formData.plan || "Pro Tier"}
             </Badge>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full border border-border/70">
+              <span className={`h-2 w-2 rounded-full ${isSyncing ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
+              <span className="text-[11px] font-medium">{isSyncing ? "Syncing..." : "Cloud Synced"}</span>
+            </div>
           </div>
           <p className="text-xs sm:text-sm text-muted-foreground">
             Manage your account identity, team co-workers, workspace branding, and regional standards.
@@ -902,15 +941,52 @@ export default function Settings() {
               <CardContent className="pt-4 space-y-4">
                 <div className="rounded-lg border border-border/80 bg-secondary/30 p-3 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <AppLogo variant="dark" size="sm" />
+                    {formData.companyLogoUrl ? (
+                      <div className="h-10 w-10 rounded-md overflow-hidden bg-white border border-border/50 flex items-center justify-center shrink-0">
+                        <img 
+                          src={formData.companyLogoUrl} 
+                          alt="Workspace Logo" 
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <AppLogo variant="dark" size="sm" />
+                    )}
                     <div>
                       <span className="text-xs font-semibold text-foreground block">Workspace Vector Logo</span>
                       <span className="text-[10px] text-muted-foreground">High-contrast SVG & PNG format</span>
                     </div>
                   </div>
-                  <Badge variant="neutral" size="sm" className="font-mono text-[10px]">
-                    /clear.png
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {formData.companyLogoUrl && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
+                        onClick={() => handleChange("companyLogoUrl", "")}
+                        disabled={isUploadingLogo}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                    <input 
+                      type="file" 
+                      accept="image/png, image/svg+xml, image/jpeg" 
+                      className="hidden" 
+                      ref={fileInputRef}
+                      onChange={handleLogoUpload}
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-7 text-[10px] px-2 shrink-0"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploadingLogo}
+                    >
+                      {isUploadingLogo ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Upload className="h-3 w-3 mr-1" />}
+                      Upload Logo
+                    </Button>
+                  </div>
                 </div>
 
                 <div>
@@ -1277,6 +1353,55 @@ export default function Settings() {
                     <Plus className="h-3 w-3" />
                     <span>Add Preset</span>
                   </Button>
+                </div>
+              </div>
+
+              {/* Pipeline Workflow Template */}
+              <div className="pt-4 border-t border-border/50">
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className="text-xs font-semibold text-foreground block">
+                    Pipeline Workflow Template
+                  </Label>
+                  <span className="text-[11px] text-muted-foreground">
+                    Configures Kanban stages and default deal flows
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {Object.values(pipelineTemplates).map((tpl) => {
+                    const isSelected = (formData.pipelineTemplate || "Agency") === tpl.id
+                    return (
+                      <div
+                        key={tpl.id}
+                        onClick={() => {
+                          handleChange("pipelineTemplate", tpl.id)
+                          handleChange("customStages", undefined as any)
+                        }}
+                        className={`rounded-lg border p-3 cursor-pointer transition-all ${
+                          isSelected
+                            ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-2xs"
+                            : "border-border/80 bg-card hover:bg-secondary/40"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold text-foreground">{tpl.name}</span>
+                          {isSelected && (
+                            <Badge variant="indigo" size="sm" className="text-[10px] px-1.5 py-0">Active</Badge>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mb-2 leading-tight">{tpl.description}</p>
+                        <div className="flex flex-wrap gap-1">
+                          {tpl.stages.map((st) => (
+                            <span
+                              key={st.id}
+                              className="text-[10px] font-medium bg-secondary px-1.5 py-0.5 rounded text-muted-foreground border border-border/50"
+                            >
+                              {st.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             </CardContent>

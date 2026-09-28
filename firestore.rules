@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Security rules for Users
+    match /users/{userId} {
+      // Users can only read and write their own document
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Security rules for Workspaces
+    match /workspaces/{workspaceId} {
+      // Users can only read and write workspaces they own
+      allow read, write: if request.auth != null && request.auth.uid == workspaceId;
+      
+      // Allow workspace owner full access to all subcollections (leads, settings, etc.)
+      match /{allPaths=**} {
+        allow read, write: if request.auth != null && request.auth.uid == workspaceId;
+      }
+    }
+  }
+}

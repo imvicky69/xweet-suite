@@ -115,7 +115,7 @@ export function FlowDialog({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 overflow-y-auto">
       {/* Blurred Backdrop */}
       <div
         className="fixed inset-0 bg-background/85 backdrop-blur-md transition-opacity animate-in fade-in-0 duration-200"
@@ -127,7 +127,7 @@ export function FlowDialog({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative z-50 flex flex-col w-full max-w-2xl min-h-[460px] sm:min-h-[500px] rounded-2xl border border-border/80 bg-card shadow-2xl transition-all animate-in fade-in-0 zoom-in-95 duration-200 overflow-hidden"
+        className="relative z-50 flex flex-col w-full max-w-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[85vh] sm:min-h-[500px] rounded-2xl border border-border/80 bg-card shadow-2xl transition-all animate-in fade-in-0 zoom-in-95 duration-200 overflow-hidden"
       >
         {/* Sleek Minimal Top Progress Line (No ugly step bubbles!) */}
         <div className="h-1 w-full bg-secondary overflow-hidden">

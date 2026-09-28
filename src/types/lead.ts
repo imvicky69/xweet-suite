@@ -8,6 +8,7 @@ export type LeadStage =
   | "Negotiation"
   | "Won"
   | "Lost"
+  | (string & {})
 
 export type LeadPriority = "Urgent" | "High" | "Medium" | "Low"
 
@@ -73,15 +74,7 @@ export const leadFormSchema = z
     serviceInterest: z.string().min(1, "Service interest is required"),
     estimatedValue: z.number().min(1, "Estimated deal value is required"),
     priority: z.enum(["Urgent", "High", "Medium", "Low"]),
-    status: z.enum([
-      "New",
-      "Contacted",
-      "In Discovery",
-      "Proposal Sent",
-      "Negotiation",
-      "Won",
-      "Lost",
-    ]),
+    status: z.string().min(1, "Stage status is required"),
     notes: z.string().optional(),
     nextFollowUpDate: z.string().min(1, "Follow-up date is required"),
     nextFollowUpTime: z.string().min(1, "Follow-up time is required"),

@@ -23,7 +23,8 @@ import {
 import { toast } from "sonner"
 import type { LeadItem, LeadFormData, LeadStage, LeadPriority } from "@/types/lead"
 import { hasValidPhone, hasValidEmail } from "@/types/lead"
-import { initialMockLeads } from "@/data/mockLeads"
+import { subscribeToLeads, saveLead, deleteLead } from "@/data/leadsService"
+import { auth } from "@/lib/firebase"
 import { LeadWidgets } from "@/components/leads/LeadWidgets"
 import { LeadFormDialog } from "@/components/leads/LeadFormDialog"
 import { LeadDetailsDialog, WhatsAppIcon } from "@/components/leads/LeadDetailsDialog"
@@ -55,22 +56,16 @@ const priorityBadgeVariant: Record<
 
 export default function Leads() {
   const { settings, formatCurrency, getWhatsAppUrl } = useWorkspace()
-  const [leads, setLeads] = React.useState<LeadItem[]>(() => {
-    const saved = localStorage.getItem("xweet_leads_mock")
-    if (saved) {
-      try {
-        return JSON.parse(saved)
-      } catch {
-        return []
-      }
-    }
-    return []
-  })
+  const [leads, setLeads] = React.useState<LeadItem[]>([])
 
-  // Sync with localStorage
+  const workspaceId = auth.currentUser?.uid || "shared"
+
   React.useEffect(() => {
-    localStorage.setItem("xweet_leads_mock", JSON.stringify(leads))
-  }, [leads])
+    const unsubscribe = subscribeToLeads(workspaceId, (fetchedLeads) => {
+      setLeads(fetchedLeads)
+    })
+    return () => unsubscribe()
+  }, [workspaceId])
 
   // View mode: active pipeline vs archived lists
   const [viewMode, setViewMode] = React.useState<"active" | "archived">("active")
@@ -80,40 +75,36 @@ export default function Leads() {
   const archivedLeads = React.useMemo(() => leads.filter((l) => Boolean(l.isArchived)), [leads])
 
   // Archive / Restore handler
-  const handleToggleArchive = (leadId: string, shouldArchive: boolean) => {
+  const handleToggleArchive = async (leadId: string, shouldArchive: boolean) => {
     const targetLead = leads.find((l) => l.id === leadId)
+    if (!targetLead) return
     const now = new Date().toISOString().slice(0, 10)
-    setLeads((prev) =>
-      prev.map((l) =>
-        l.id === leadId
-          ? {
-              ...l,
-              isArchived: shouldArchive,
-              archivedAt: shouldArchive ? now : undefined,
-              showOnDashboard: shouldArchive ? false : l.showOnDashboard,
-            }
-          : l
-      )
-    )
-    if (shouldArchive) {
-      toast.success(`Archived "${targetLead?.businessName || "lead"}"`, {
-        description: "Moved to Archive Lists. Hidden from main active pipeline.",
+    
+    try {
+      await saveLead(workspaceId, {
+        ...targetLead,
+        isArchived: shouldArchive,
+        archivedAt: shouldArchive ? now : undefined,
+        showOnDashboard: shouldArchive ? false : targetLead.showOnDashboard,
       })
-    } else {
-      toast.success(`Restored "${targetLead?.businessName || "lead"}"`, {
-        description: "Moved back to active pipeline.",
-      })
-    }
-    if (viewingLead && viewingLead.id === leadId) {
-      setViewingLead((prev) =>
-        prev
-          ? {
-              ...prev,
-              isArchived: shouldArchive,
-              archivedAt: shouldArchive ? now : undefined,
-            }
-          : null
-      )
+      if (shouldArchive) {
+        toast.success(`Archived "${targetLead.businessName || "lead"}"`, {
+          description: "Moved to Archive Lists. Hidden from main active pipeline.",
+        })
+      } else {
+        toast.success(`Restored "${targetLead.businessName || "lead"}"`, {
+          description: "Moved back to active pipeline.",
+        })
+      }
+      if (viewingLead && viewingLead.id === leadId) {
+        setViewingLead(prev => prev ? {
+          ...prev,
+          isArchived: shouldArchive,
+          archivedAt: shouldArchive ? now : undefined,
+        } : null)
+      }
+    } catch (error) {
+      toast.error("Failed to update archive status")
     }
   }
 
@@ -130,53 +121,66 @@ export default function Leads() {
   const [editingLead, setEditingLead] = React.useState<LeadItem | null>(null)
   const [viewingLead, setViewingLead] = React.useState<LeadItem | null>(null)
 
+  const currentViewingLead = React.useMemo(() => {
+    if (!viewingLead) return null
+    return leads.find((l) => l.id === viewingLead.id) || viewingLead
+  }, [leads, viewingLead])
+
   // Add / Edit lead submission
-  const handleSaveLead = (formData: LeadFormData) => {
-    if (editingLead) {
-      const updated: LeadItem = {
-        ...editingLead,
-        ...formData,
+  const handleSaveLead = async (formData: LeadFormData) => {
+    try {
+      if (editingLead) {
+        const updated: LeadItem = {
+          ...editingLead,
+          ...formData,
+        }
+        await saveLead(workspaceId, updated)
+        toast.success(`Updated lead for ${formData.businessName}`)
+        setEditingLead(null)
+      } else {
+        const now = new Date()
+        const newLead: LeadItem = {
+          ...formData,
+          id: `lead-${Date.now()}`,
+          createdAt: now.toISOString().slice(0, 10),
+          lastContactIST: "Just now",
+          isArchived: false,
+        }
+        await saveLead(workspaceId, newLead)
+        toast.success(`Created lead: ${formData.businessName} (₹${formData.estimatedValue.toLocaleString("en-IN")})`)
       }
-      setLeads((prev) => prev.map((l) => (l.id === editingLead.id ? updated : l)))
-      toast.success(`Updated lead for ${formData.businessName}`)
-      setEditingLead(null)
-    } else {
-      const now = new Date()
-      const newLead: LeadItem = {
-        ...formData,
-        id: `lead-${Date.now()}`,
-        createdAt: now.toISOString().slice(0, 10),
-        lastContactIST: "Just now",
-        isArchived: false,
-      }
-      setLeads((prev) => [newLead, ...prev])
-      toast.success(`Created lead: ${formData.businessName} (₹${formData.estimatedValue.toLocaleString("en-IN")})`)
+    } catch (error) {
+      toast.error("Failed to save lead")
     }
   }
 
   // Delete lead (safely called from Details dialog)
-  const handleDeleteLead = (id: string, name: string) => {
-    setLeads((prev) => prev.filter((l) => l.id !== id))
-    toast.info(`Deleted lead: ${name}`)
-    if (viewingLead?.id === id) setViewingLead(null)
+  const handleDeleteLead = async (id: string, name: string) => {
+    try {
+      await deleteLead(workspaceId, id)
+      toast.info(`Deleted lead: ${name}`)
+      if (viewingLead?.id === id) setViewingLead(null)
+    } catch (error) {
+      toast.error("Failed to delete lead")
+    }
   }
 
   // Stage change quick action
-  const handleStatusChange = (leadId: string, newStatus: LeadStage) => {
-    setLeads((prev) =>
-      prev.map((l) =>
-        l.id === leadId
-          ? {
-              ...l,
-              status: newStatus,
-              lastContactIST: "Today, just now",
-            }
-          : l
-      )
-    )
-    toast.success(`Stage updated to "${newStatus}"`)
-    if (viewingLead && viewingLead.id === leadId) {
-      setViewingLead((prev) => (prev ? { ...prev, status: newStatus } : null))
+  const handleStatusChange = async (leadId: string, newStatus: LeadStage) => {
+    const targetLead = leads.find(l => l.id === leadId)
+    if (!targetLead) return
+    try {
+      await saveLead(workspaceId, {
+        ...targetLead,
+        status: newStatus,
+        lastContactIST: "Today, just now",
+      })
+      toast.success(`Stage updated to "${newStatus}"`)
+      if (viewingLead && viewingLead.id === leadId) {
+        setViewingLead((prev) => (prev ? { ...prev, status: newStatus } : null))
+      }
+    } catch (error) {
+      toast.error("Failed to update status")
     }
   }
 
@@ -620,20 +624,6 @@ export default function Leads() {
                   <Plus className="h-3.5 w-3.5" />
                   <span>+ Add Your First Lead</span>
                 </button>
-                {leads.length === 0 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setLeads(initialMockLeads)
-                      toast.success("Loaded 8 starter sample leads for testing")
-                    }}
-                    className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                  >
-                    <span>Load Sample Data</span>
-                  </Button>
-                )}
               </div>
             )}
           </CardContent>
@@ -1069,7 +1059,7 @@ export default function Leads() {
 
       {/* View Lead Details Dialog (With safe delete & archive toggle inside) */}
       <LeadDetailsDialog
-        lead={viewingLead}
+        lead={currentViewingLead}
         open={Boolean(viewingLead)}
         onOpenChange={(open) => !open && setViewingLead(null)}
         onEdit={(lead) => {

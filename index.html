@@ -4,8 +4,25 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="alternate icon" type="image/png" href="/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>Xweet Suite — Freelance HQ</title>
+    <script>
+      // Prevent mobile gesture zoom (pinch-to-zoom on iOS Safari)
+      document.addEventListener("gesturestart", function (e) {
+        e.preventDefault();
+      });
+      document.addEventListener("gesturechange", function (e) {
+        e.preventDefault();
+      });
+      document.addEventListener("gestureend", function (e) {
+        e.preventDefault();
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

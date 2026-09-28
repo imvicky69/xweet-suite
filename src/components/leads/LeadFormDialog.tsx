@@ -16,6 +16,7 @@ import {
   MapPin,
   Calendar,
   Pin,
+  Globe,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -51,6 +52,7 @@ interface LeadFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   leadToEdit?: LeadItem | null
+  defaultStage?: string
   onSubmit: (data: LeadFormData) => void
 }
 
@@ -58,6 +60,7 @@ export function LeadFormDialog({
   open,
   onOpenChange,
   leadToEdit,
+  defaultStage,
   onSubmit,
 }: LeadFormDialogProps) {
   const isEditing = Boolean(leadToEdit)
@@ -108,14 +111,14 @@ export function LeadFormDialog({
       serviceInterest: settings.services[0] || "Full-Stack MVP Development",
       estimatedValue: settings.valuePresets[1]?.val || 350000,
       priority: "High",
-      status: "New",
+      status: defaultStage || "New",
       notes: "",
       nextFollowUpDate: today,
       nextFollowUpTime: "14:30",
       showOnDashboard: true,
       dashboardNote: "",
     }
-  }, [leadToEdit, open, settings])
+  }, [leadToEdit, defaultStage, open, settings])
 
   const {
     register,
@@ -165,6 +168,10 @@ export function LeadFormDialog({
     } else if (step === 1) {
       isValid = await trigger(["contactPerson", "location"])
     } else if (step === 2) {
+      // Validate website format if entered
+      const isWebsiteValid = await trigger(["website"])
+      if (!isWebsiteValid) return
+
       // Flexible either/or contact validation
       const emailVal = (watched.email || "").trim()
       const rawDigits = cleanDigitsOnly(watched.phone || "")
@@ -229,6 +236,7 @@ export function LeadFormDialog({
     const digits = cleanDigitsOnly(data.phone || "")
     const cleanedData: LeadFormData = {
       ...data,
+      website: (data.website || "").trim(),
       phone: digits.length >= 7 ? data.phone.trim() : "",
       email: data.email ? data.email.trim() : "",
       dashboardNote: (data.dashboardNote || data.notes || "").trim(),
@@ -249,8 +257,9 @@ export function LeadFormDialog({
     const hasEmail = Boolean(watched.email && watched.email.trim().length > 0)
     const rawDigits = cleanDigitsOnly(watched.phone || "")
     const hasPhone = rawDigits.length > 0
+    const hasWebsite = Boolean(watched.website && watched.website.trim().length > 0)
     const hasNotes = Boolean(watched.notes && watched.notes.trim().length > 0)
-    return isDirty || step > 0 || hasBusinessName || hasContactPerson || hasEmail || hasPhone || hasNotes
+    return isDirty || step > 0 || hasBusinessName || hasContactPerson || hasEmail || hasPhone || hasWebsite || hasNotes
   }, [isEditing, isDirty, step, watched, cleanDigitsOnly])
 
   // Discard all changes and reset form
@@ -479,6 +488,27 @@ export function LeadFormDialog({
                 </div>
                 {errors.phone && (
                   <p className="text-xs text-destructive mt-1">{errors.phone.message}</p>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs text-muted-foreground block">
+                    Website or Portfolio URL
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground/70">Optional</span>
+                </div>
+                <div className="relative">
+                  <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="e.g. https://karvhomes.com or acme.in"
+                    className={`h-11 pl-10 text-sm font-medium ${errors.website ? "border-destructive" : ""}`}
+                    {...register("website")}
+                  />
+                </div>
+                {errors.website && (
+                  <p className="text-xs text-destructive mt-1">{errors.website.message}</p>
                 )}
               </div>
 

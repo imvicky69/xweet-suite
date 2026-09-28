@@ -1,4 +1,71 @@
 import * as React from "react"
+import { db, auth } from "@/lib/firebase"
+import { doc, setDoc, onSnapshot, serverTimestamp } from "firebase/firestore"
+import { onAuthStateChanged } from "firebase/auth"
+
+export interface PipelineStageConfig {
+  id: string
+  label: string
+  color: string
+}
+
+export interface PipelineTemplateConfig {
+  id: string
+  name: string
+  description: string
+  stages: PipelineStageConfig[]
+}
+
+export const WORKSPACE_PIPELINE_TEMPLATES: Record<string, PipelineTemplateConfig> = {
+  Agency: {
+    id: "Agency",
+    name: "Agency & Studio",
+    description: "Multi-client scoping, design sprints & engineering retainers",
+    stages: [
+      { id: "In Discovery", label: "Discovery", color: "indigo" },
+      { id: "Proposal Sent", label: "Proposal Sent", color: "sky" },
+      { id: "Negotiation", label: "Negotiation", color: "amber" },
+      { id: "Won", label: "Closed Won", color: "emerald" },
+    ],
+  },
+  Freelancing: {
+    id: "Freelancing",
+    name: "Freelance HQ",
+    description: "Solo designers, developers & fractional consultants",
+    stages: [
+      { id: "New", label: "Inbound Prospect", color: "slate" },
+      { id: "In Discovery", label: "Discovery Call", color: "indigo" },
+      { id: "Proposal Sent", label: "Proposal & Scope", color: "sky" },
+      { id: "Negotiation", label: "Rate Negotiation", color: "amber" },
+      { id: "Won", label: "Project Won", color: "emerald" },
+    ],
+  },
+  Sales: {
+    id: "Sales",
+    name: "B2B High Velocity",
+    description: "Fast-moving qualification, demo sessions & enterprise closing",
+    stages: [
+      { id: "Contacted", label: "Qualified Lead", color: "slate" },
+      { id: "In Discovery", label: "Demo & Solution", color: "indigo" },
+      { id: "Proposal Sent", label: "Proposal Sent", color: "sky" },
+      { id: "Negotiation", label: "Legal / Negotiation", color: "amber" },
+      { id: "Won", label: "Closed Won", color: "emerald" },
+    ],
+  },
+  Full: {
+    id: "Full",
+    name: "Full Lifecycle",
+    description: "Comprehensive 6-stage end-to-end client journey",
+    stages: [
+      { id: "New", label: "New Lead", color: "slate" },
+      { id: "Contacted", label: "Contacted", color: "blue" },
+      { id: "In Discovery", label: "In Discovery", color: "indigo" },
+      { id: "Proposal Sent", label: "Proposal Sent", color: "sky" },
+      { id: "Negotiation", label: "Negotiation", color: "amber" },
+      { id: "Won", label: "Closed Won", color: "emerald" },
+    ],
+  },
+}
 
 export interface CountryConfig {
   code: string
@@ -46,6 +113,10 @@ export interface WorkspaceSettings {
   services: string[]
   cityPresets: string[]
   valuePresets: ValuePreset[]
+
+  // Pipeline Template Preferences
+  pipelineTemplate?: string
+  customStages?: PipelineStageConfig[]
 
   // Subscription, Trial & Use Case
   plan?: string
@@ -243,24 +314,33 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   role: "Agency Owner",
   useCase: "Agency",
   companyName: "Xweet Agency",
+  pipelineTemplate: "Agency",
 }
 
 const STORAGE_KEY = "xweet_suite_workspace_settings_v1"
 
 interface WorkspaceContextType {
   settings: WorkspaceSettings
-  updateSettings: (newSettings: Partial<WorkspaceSettings>) => void
-  resetSettings: () => void
+  updateSettings: (newSettings: Partial<WorkspaceSettings>) => Promise<void> | void
+  resetSettings: () => Promise<void> | void
   formatCurrency: (value: number) => string
   formatCompactCurrency: (value: number) => string
   formatPhoneNumber: (rawPhone: string) => string
   cleanDigitsOnly: (rawPhone: string) => string
   getWhatsAppUrl: (phone: string, leadName?: string) => string
+  isSyncing: boolean
+  lastSyncedAt: Date | null
+  activePipelineStages: PipelineStageConfig[]
+  pipelineTemplates: Record<string, PipelineTemplateConfig>
+  setPipelineTemplate: (templateId: string) => void
 }
 
 const WorkspaceContext = React.createContext<WorkspaceContextType | undefined>(undefined)
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+  const [isSyncing, setIsSyncing] = React.useState(false)
+  const [lastSyncedAt, setLastSyncedAt] = React.useState<Date | null>(null)
+
   const [settings, setSettings] = React.useState<WorkspaceSettings>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
@@ -279,13 +359,73 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     return DEFAULT_WORKSPACE_SETTINGS
   })
 
-  // Persist on change
-  const updateSettings = React.useCallback((partial: Partial<WorkspaceSettings>) => {
+  // Real-time bidirectional sync with Firestore on user auth
+  React.useEffect(() => {
+    let unsubscribeFirestore: (() => void) | null = null
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const workspaceDocRef = doc(db, "workspaces", user.uid)
+        unsubscribeFirestore = onSnapshot(
+          workspaceDocRef,
+          (snapshot) => {
+            if (snapshot.exists()) {
+              const remoteData = snapshot.data()
+              setSettings((prev) => {
+                const merged: WorkspaceSettings = {
+                  ...DEFAULT_WORKSPACE_SETTINGS,
+                  ...prev,
+                  ...remoteData,
+                  country: { ...DEFAULT_WORKSPACE_SETTINGS.country, ...(remoteData.country || prev.country) },
+                  currency: { ...DEFAULT_WORKSPACE_SETTINGS.currency, ...(remoteData.currency || prev.currency) },
+                }
+                try {
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
+                } catch {}
+                return merged
+              })
+              setLastSyncedAt(new Date())
+            } else {
+              // Initialize empty workspace doc in Firestore
+              setDoc(
+                workspaceDocRef,
+                {
+                  ...DEFAULT_WORKSPACE_SETTINGS,
+                  userId: user.uid,
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+              ).catch(console.warn)
+            }
+          },
+          (err) => {
+            console.warn("Firestore workspace listener info:", err)
+          }
+        )
+      } else {
+        if (unsubscribeFirestore) {
+          unsubscribeFirestore()
+          unsubscribeFirestore = null
+        }
+      }
+    })
+
+    return () => {
+      unsubscribeAuth()
+      if (unsubscribeFirestore) unsubscribeFirestore()
+    }
+  }, [])
+
+  // Persist locally and sync to Firestore
+  const updateSettings = React.useCallback(async (partial: Partial<WorkspaceSettings>) => {
+    let nextSettings: WorkspaceSettings | null = null
     setSettings((prev) => {
       const updated: WorkspaceSettings = {
         ...prev,
         ...partial,
       }
+      nextSettings = updated
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
       } catch (e) {
@@ -293,14 +433,84 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
       return updated
     })
+
+    const user = auth.currentUser
+    if (user && nextSettings) {
+      setIsSyncing(true)
+      try {
+        const workspaceDocRef = doc(db, "workspaces", user.uid)
+        const userDocRef = doc(db, "users", user.uid)
+        await Promise.all([
+          setDoc(
+            workspaceDocRef,
+            {
+              ...(nextSettings as WorkspaceSettings),
+              userId: user.uid,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          ),
+          setDoc(
+            userDocRef,
+            {
+              workspaceName: (nextSettings as WorkspaceSettings).workspaceName,
+              companyName: (nextSettings as WorkspaceSettings).companyName,
+              companyLogoUrl: (nextSettings as WorkspaceSettings).companyLogoUrl || "",
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          ),
+        ])
+        setLastSyncedAt(new Date())
+      } catch (e) {
+        console.warn("Firestore settings sync error:", e)
+      } finally {
+        setIsSyncing(false)
+      }
+    }
   }, [])
 
-  const resetSettings = React.useCallback(() => {
+  const resetSettings = React.useCallback(async () => {
     try {
       localStorage.removeItem(STORAGE_KEY)
     } catch {}
     setSettings(DEFAULT_WORKSPACE_SETTINGS)
+    const user = auth.currentUser
+    if (user) {
+      try {
+        await setDoc(doc(db, "workspaces", user.uid), {
+          ...DEFAULT_WORKSPACE_SETTINGS,
+          userId: user.uid,
+          updatedAt: serverTimestamp(),
+        })
+      } catch (e) {
+        console.warn("Firestore reset error:", e)
+      }
+    }
   }, [])
+
+  // Compute active pipeline stages based on selected template
+  const activePipelineStages = React.useMemo(() => {
+    if (settings.customStages && settings.customStages.length > 0) {
+      return settings.customStages
+    }
+    const templateKey = settings.pipelineTemplate || "Agency"
+    const template = WORKSPACE_PIPELINE_TEMPLATES[templateKey] || WORKSPACE_PIPELINE_TEMPLATES.Agency
+    return template.stages
+  }, [settings.customStages, settings.pipelineTemplate])
+
+  const setPipelineTemplate = React.useCallback(
+    (templateId: string) => {
+      const template = WORKSPACE_PIPELINE_TEMPLATES[templateId]
+      if (template) {
+        updateSettings({
+          pipelineTemplate: templateId,
+          customStages: undefined, // revert to template default stages
+        })
+      }
+    },
+    [updateSettings]
+  )
 
   // Dynamic currency formatter based on workspace preference
   const formatCurrency = React.useCallback(
@@ -438,6 +648,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         formatPhoneNumber,
         cleanDigitsOnly,
         getWhatsAppUrl,
+        isSyncing,
+        lastSyncedAt,
+        activePipelineStages,
+        pipelineTemplates: WORKSPACE_PIPELINE_TEMPLATES,
+        setPipelineTemplate,
       }}
     >
       {children}

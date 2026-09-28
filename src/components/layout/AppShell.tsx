@@ -24,6 +24,7 @@ import { useWorkspace } from "@/context/WorkspaceContext"
 import { AppLogo } from "@/components/ui/app-logo"
 import { auth } from "@/lib/firebase"
 import { signOut } from "firebase/auth"
+import { subscribeToLeads } from "@/data/leadsService"
 
 interface AppShellProps {
   children: React.ReactNode
@@ -47,14 +48,12 @@ const mainNavItems: NavItemConfig[] = [
     to: "/leads",
     icon: Users,
     label: "Leads",
-    badge: "3 new",
     badgeVariant: "indigo",
   },
   {
     to: "/pipeline",
     icon: Columns3,
     label: "Pipeline",
-    badge: 8,
     badgeVariant: "neutral",
   },
   {
@@ -89,6 +88,20 @@ export function AppShell({ children }: AppShellProps) {
   const profileMenuRef = React.useRef<HTMLDivElement>(null)
   const location = useLocation()
   const { settings } = useWorkspace()
+
+  const [leadsCount, setLeadsCount] = React.useState({ newLeads: 0, pipeline: 0 })
+
+  React.useEffect(() => {
+    const workspaceId = auth.currentUser?.uid || "shared"
+    const unsubscribe = subscribeToLeads(workspaceId, (fetchedLeads) => {
+      const activeLeads = fetchedLeads.filter(l => !l.isArchived)
+      setLeadsCount({
+        newLeads: activeLeads.filter(l => l.status === "New").length,
+        pipeline: activeLeads.filter(l => l.status !== "Lost" && l.status !== "Won").length
+      })
+    })
+    return () => unsubscribe()
+  }, [auth.currentUser?.uid])
 
   // Close mobile sidebar and profile dropdown on route change
   React.useEffect(() => {
@@ -243,6 +256,14 @@ export function AppShell({ children }: AppShellProps) {
             <nav className="space-y-0.5">
               {mainNavItems.map((item) => {
                 const Icon = item.icon
+                let computedBadge = item.badge
+                
+                if (item.label === "Leads") {
+                  computedBadge = leadsCount.newLeads > 0 ? `${leadsCount.newLeads} new` : undefined
+                } else if (item.label === "Pipeline") {
+                  computedBadge = leadsCount.pipeline > 0 ? leadsCount.pipeline : undefined
+                }
+                
                 return (
                   <NavLink
                     key={item.to}
@@ -270,13 +291,13 @@ export function AppShell({ children }: AppShellProps) {
                           />
                           <span className="truncate">{item.label}</span>
                         </div>
-                        {item.badge && (
+                        {computedBadge && (
                           <Badge
                             variant={item.badgeVariant || "neutral"}
                             size="sm"
                             className="font-normal"
                           >
-                            {item.badge}
+                            {computedBadge}
                           </Badge>
                         )}
                         {isActive && (

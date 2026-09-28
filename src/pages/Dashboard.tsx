@@ -38,6 +38,8 @@ import { hasValidPhone, hasValidEmail } from "@/types/lead"
 import { WhatsAppIcon } from "@/components/leads/LeadDetailsDialog"
 import { LeadFormDialog } from "@/components/leads/LeadFormDialog"
 import { getFollowUpStatus } from "@/lib/formatters"
+import { subscribeToLeads, saveLead } from "@/data/leadsService"
+import { auth } from "@/lib/firebase"
 
 interface Milestone {
   id: string
@@ -58,54 +60,35 @@ interface QuickNoteItem {
 export default function Dashboard() {
   const navigate = useNavigate()
   const { settings, formatCurrency, formatCompactCurrency, getWhatsAppUrl } = useWorkspace()
+  const workspaceId = auth.currentUser?.uid || "shared"
 
-  // Leads for Follow-up Reminders & Pinned Notes
-  const [dashboardLeads, setDashboardLeads] = React.useState<LeadItem[]>(() => {
-    try {
-      const saved = localStorage.getItem("xweet_leads_mock")
-      if (saved) return JSON.parse(saved)
-    } catch (e) {
-      console.warn("Could not read leads for dashboard", e)
-    }
-    return []
-  })
-
+  // Live leads from Firestore
+  const [dashboardLeads, setDashboardLeads] = React.useState<LeadItem[]>([])
   const [isAddLeadOpen, setIsAddLeadOpen] = React.useState(false)
 
-  // Sync leads from storage if changed elsewhere
   React.useEffect(() => {
-    const handleStorageChange = () => {
-      try {
-        const saved = localStorage.getItem("xweet_leads_mock")
-        if (saved) {
-          setDashboardLeads(JSON.parse(saved))
-        } else {
-          setDashboardLeads([])
-        }
-      } catch {}
-    }
-    window.addEventListener("storage", handleStorageChange)
-    return () => window.removeEventListener("storage", handleStorageChange)
-  }, [])
+    const unsubscribe = subscribeToLeads(workspaceId, (leads) => {
+      setDashboardLeads(leads)
+    })
+    return () => unsubscribe()
+  }, [workspaceId])
 
-  const handleCreateLead = (formData: LeadFormData) => {
-    const now = new Date()
-    const newLead: LeadItem = {
-      ...formData,
-      id: `lead-${Date.now()}`,
-      createdAt: now.toISOString().slice(0, 10),
-      lastContactIST: "Just now",
-      isArchived: false,
-    }
-    const updated = [newLead, ...dashboardLeads]
-    setDashboardLeads(updated)
+  const handleCreateLead = async (formData: LeadFormData) => {
     try {
-      localStorage.setItem("xweet_leads_mock", JSON.stringify(updated))
-    } catch (e) {
-      console.warn("Could not save new lead", e)
+      const now = new Date()
+      const newLead: LeadItem = {
+        ...formData,
+        id: `lead-${Date.now()}`,
+        createdAt: now.toISOString().slice(0, 10),
+        lastContactIST: "Just now",
+        isArchived: false,
+      }
+      await saveLead(workspaceId, newLead)
+      toast.success(`Created lead: ${formData.businessName}`)
+      setIsAddLeadOpen(false)
+    } catch {
+      toast.error("Failed to create lead")
     }
-    toast.success(`Created lead: ${formData.businessName}`)
-    setIsAddLeadOpen(false)
   }
 
   // Active leads pool
@@ -143,16 +126,20 @@ export default function Dashboard() {
     )
   }, [dashboardLeads])
 
-  const dismissReminder = (leadId: string, e: React.MouseEvent) => {
+  const dismissReminder = async (leadId: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    const updated = dashboardLeads.map((l) =>
-      l.id === leadId ? { ...l, showOnDashboard: false, dashboardNote: "" } : l
-    )
-    setDashboardLeads(updated)
+    const targetLead = dashboardLeads.find((l) => l.id === leadId)
+    if (!targetLead) return
     try {
-      localStorage.setItem("xweet_leads_mock", JSON.stringify(updated))
-    } catch {}
-    toast.info("Reminder dismissed from dashboard")
+      await saveLead(workspaceId, {
+        ...targetLead,
+        showOnDashboard: false,
+        dashboardNote: "",
+      })
+      toast.info("Reminder dismissed from dashboard")
+    } catch {
+      toast.error("Failed to dismiss reminder")
+    }
   }
 
   // Milestones State with localStorage persistence
